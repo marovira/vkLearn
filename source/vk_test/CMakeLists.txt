@@ -15,3 +15,4 @@ target_link_libraries(${EXEC_NAME} PRIVATE fmt::fmt-header-only glm glfw Vulkan:
 target_compile_options(${EXEC_NAME} PUBLIC "${COMMON_COMPILER_FLAGS}")
 target_compile_options(${EXEC_NAME} PUBLIC "${COMMON_DEBUG_FLAGS}")
 target_compile_options(${EXEC_NAME} PUBLIC "${COMMON_RELEASE_FLAGS}")
+target_compile_options(${EXEC_NAME} PRIVATE -wd4005)
