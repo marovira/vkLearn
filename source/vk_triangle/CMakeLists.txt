@@ -2,6 +2,8 @@ get_filename_component(EXEC_NAME ${CMAKE_CURRENT_LIST_DIR} NAME)
 
 set(SOURCE_LIST
     "${CMAKE_CURRENT_LIST_DIR}/main.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/HelloTriangle.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/HelloTriangle.hpp"
     )
 set(INCLUDE_LIST
     )
