@@ -15,6 +15,8 @@ private:
 
     void initVulkan();
     void checkExtensions();
+    bool checkValidationLayers();
+    std::vector<const char*> getRequiredExtensions();
     void createInstance();
 
     void mainLoop();

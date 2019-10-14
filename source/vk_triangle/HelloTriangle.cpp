@@ -6,6 +6,15 @@
 static constexpr auto gWindowWidth{800};
 static constexpr auto gWindowHeight{600};
 
+static constexpr std::array<const char*, 1> gValidationLayers{
+    "VK_LAYER_KHRONOS_validation"};
+
+#if defined(NDEBUG)
+static constexpr auto gEnableValidationLayers{false};
+#else
+static constexpr auto gEnableValidationLayers{true};
+#endif
+
 namespace vk
 {
     constexpr std::uint32_t
@@ -15,9 +24,23 @@ namespace vk
     }
 } // namespace vk
 
-void errorCallack(int code, const char* message)
+static void errorCallack(int code, const char* message)
 {
     fmt::print("error ({}): {}\n", code, message);
+}
+
+static VKAPI_ATTR vk::Bool32 VKAPI_CALL
+debugCallback(vk::DebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
+              vk::DebugUtilsMessageTypeFlagsEXT messageType,
+              const vk::DebugUtilsMessengerCallbackDataEXT* callbackData,
+              [[maybe_unused]] void* userData)
+{
+    std::string severity = vk::to_string(messageSeverity);
+    std::string type     = vk::to_string(messageType);
+
+    fmt::print("{} layer {}: {}\n", severity, type, callbackData->pMessage);
+
+    return false;
 }
 
 void HelloTriangleApplication::run()
@@ -50,6 +73,15 @@ void HelloTriangleApplication::initVulkan()
 
 void HelloTriangleApplication::createInstance()
 {
+    if constexpr (gEnableValidationLayers)
+    {
+        if (!checkValidationLayers())
+        {
+            throw std::runtime_error{
+                "error: validation layers are not available."};
+        }
+    }
+
     // Fill in the instance struct with some information about our application.
     // While it is technically optional, it allows the driver to optimize
     // certain things. Any global properties that are known beforehand should be
@@ -66,13 +98,21 @@ void HelloTriangleApplication::createInstance()
 
     // Because Vulkan is API agnostic, we have to load the extensions here. In
     // this case, we use GLFW's function to load the extensions it needs.
-    std::uint32_t glfwExtensionCount{0};
-    const char**  glfwExtensions{nullptr};
+    auto extensions = getRequiredExtensions();
+    createInfo.enabledExtensionCount =
+        static_cast<std::uint32_t>(extensions.size());
+    createInfo.ppEnabledExtensionNames = extensions.data();
 
-    glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
-    createInfo.enabledExtensionCount   = glfwExtensionCount;
-    createInfo.ppEnabledExtensionNames = glfwExtensions;
-    createInfo.enabledLayerCount       = 0;
+    if constexpr (gEnableValidationLayers)
+    {
+        createInfo.enabledLayerCount =
+            static_cast<std::uint32_t>(gValidationLayers.size());
+        createInfo.ppEnabledLayerNames = gValidationLayers.data();
+    }
+    else
+    {
+        createInfo.enabledLayerCount = 0;
+    }
 
     // Note: because we didn't define VULKAN_HPP_NO_EXCEPTIONS, then this
     // function (and pretty much all create functions) will throw. The
@@ -115,7 +155,7 @@ void HelloTriangleApplication::checkExtensions()
     // Check to see if the extensions that GLFW requires are here. If any of
     // them aren't there, throw an exception.
     std::uint32_t glfwExtensionCount{0};
-    const char**  glfwExtensions{nullptr};
+    const char** glfwExtensions{nullptr};
 
     glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
     std::vector<std::string_view> glfwExtensionNames;
@@ -143,4 +183,41 @@ void HelloTriangleApplication::checkExtensions()
         throw std::runtime_error{"error: system does not support the minimum "
                                  "required Vulkan extensions."};
     }
+}
+
+bool HelloTriangleApplication::checkValidationLayers()
+{
+    std::vector<vk::LayerProperties> availableLayers =
+        vk::enumerateInstanceLayerProperties();
+
+    for (const char* layerName : gValidationLayers)
+    {
+        if (std::find_if(availableLayers.begin(), availableLayers.end(),
+                         [layerName](auto const& layerProperty) {
+                             std::string_view layer{layerProperty.layerName};
+                             std::string_view name{layerName};
+                             return layer == name;
+                         }) == availableLayers.end())
+        {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+std::vector<const char*> HelloTriangleApplication::getRequiredExtensions()
+{
+    std::uint32_t glfwExtensionCount{0};
+    const char** glfwExtensions{nullptr};
+    glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
+
+    std::vector<const char*> extensions(glfwExtensions,
+                                        glfwExtensions + glfwExtensionCount);
+    if constexpr (gEnableValidationLayers)
+    {
+        extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+    }
+
+    return extensions;
 }
