@@ -1,46 +1,65 @@
 #include "HelloTriangle.hpp"
 
 #include <algorithm>
+#include <array>
 #include <fmt/printf.h>
+#include <functional>
 
-static constexpr auto gWindowWidth{800};
-static constexpr auto gWindowHeight{600};
-
-static constexpr std::array<const char*, 1> gValidationLayers{
-    "VK_LAYER_KHRONOS_validation"};
+namespace globals
+{
+    static constexpr auto windowWidth{800};
+    static constexpr auto windowHeight{600};
+    static constexpr std::array<const char*, 1> validationLayers{
+        "VK_LAYER_KHRONOS_validation"};
 
 #if defined(NDEBUG)
-static constexpr auto gEnableValidationLayers{false};
+    static constexpr auto enableValidationLayers{false};
 #else
-static constexpr auto gEnableValidationLayers{true};
+    static constexpr auto enableValidationLayers{true};
 #endif
 
-namespace vk
-{
-    constexpr std::uint32_t
-    makeVersion(std::uint32_t major, std::uint32_t minor, std::uint32_t patch)
-    {
-        return (((major) << 0x16) | ((minor) << 0x0C) | patch);
-    }
-} // namespace vk
-
-static void errorCallack(int code, const char* message)
-{
-    fmt::print("error ({}): {}\n", code, message);
-}
+    // We need to declare these function pointers ourselves as they are not
+    // loaded automatically by Vulkan.
+    PFN_vkCreateDebugUtilsMessengerEXT pfnVkCreateDebugUtilsMessengerEXT;
+    PFN_vkDestroyDebugUtilsMessengerEXT pfnVkDestroyDebugUtilsMessengerEXT;
+} // namespace globals
 
 static VKAPI_ATTR vk::Bool32 VKAPI_CALL
-debugCallback(vk::DebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
-              vk::DebugUtilsMessageTypeFlagsEXT messageType,
-              const vk::DebugUtilsMessengerCallbackDataEXT* callbackData,
+debugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
+              VkDebugUtilsMessageTypeFlagsEXT messageType,
+              VkDebugUtilsMessengerCallbackDataEXT const* callbackData,
               [[maybe_unused]] void* userData)
 {
-    std::string severity = vk::to_string(messageSeverity);
-    std::string type     = vk::to_string(messageType);
+    auto severity =
+        static_cast<vk::DebugUtilsMessageSeverityFlagBitsEXT>(messageSeverity);
+    auto type = static_cast<vk::DebugUtilsMessageTypeFlagsEXT>(messageType);
 
-    fmt::print("{} layer {}: {}\n", severity, type, callbackData->pMessage);
+    std::string message{};
+    message += vk::to_string(severity) + ":";
+    message += vk::to_string(type) + ": (";
+    message += callbackData->pMessageIdName;
+    message += "): ";
+    message += callbackData->pMessage;
+    fmt::print("{}\n", message);
 
     return false;
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL vkCreateDebugUtilsMessengerEXT(
+    VkInstance instance, const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo,
+    const VkAllocationCallbacks* pAllocator,
+    VkDebugUtilsMessengerEXT* pMessenger)
+{
+    return globals::pfnVkCreateDebugUtilsMessengerEXT(instance, pCreateInfo,
+                                                      pAllocator, pMessenger);
+}
+
+VKAPI_ATTR void VKAPI_CALL vkDestroyDebugUtilsMessengerEXT(
+    VkInstance instance, VkDebugUtilsMessengerEXT messenger,
+    const VkAllocationCallbacks* pAllocator)
+{
+    return globals::pfnVkDestroyDebugUtilsMessengerEXT(instance, messenger,
+                                                       pAllocator);
 }
 
 void HelloTriangleApplication::run()
@@ -51,77 +70,10 @@ void HelloTriangleApplication::run()
     cleanup();
 }
 
-void HelloTriangleApplication::initWindow()
-{
-    glfwInit();
-
-    // Since GLFW is designed to create an OpenGL context, we need to disable it
-    // for Vulkan.
-    glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-    glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
-
-    glfwSetErrorCallback(errorCallack);
-    mWindow = glfwCreateWindow(gWindowWidth, gWindowHeight, "Vulkan", nullptr,
-                               nullptr);
-}
-
 void HelloTriangleApplication::initVulkan()
 {
-    checkExtensions();
     createInstance();
-}
-
-void HelloTriangleApplication::createInstance()
-{
-    if constexpr (gEnableValidationLayers)
-    {
-        if (!checkValidationLayers())
-        {
-            throw std::runtime_error{
-                "error: validation layers are not available."};
-        }
-    }
-
-    // Fill in the instance struct with some information about our application.
-    // While it is technically optional, it allows the driver to optimize
-    // certain things. Any global properties that are known beforehand should be
-    // filled in here.
-    vk::ApplicationInfo appInfo{"Hello Triangle", vk::makeVersion(1, 1, 0),
-                                "No Engine", vk::makeVersion(1, 0, 0),
-                                VK_API_VERSION_1_1};
-
-    // This struct is NOT optional. It tells Vulkan which global extensions and
-    // validation layers we want. Note that global means the whole app, not a
-    // particular device.
-    vk::InstanceCreateInfo createInfo{};
-    createInfo.pApplicationInfo = &appInfo;
-
-    // Because Vulkan is API agnostic, we have to load the extensions here. In
-    // this case, we use GLFW's function to load the extensions it needs.
-    auto extensions = getRequiredExtensions();
-    createInfo.enabledExtensionCount =
-        static_cast<std::uint32_t>(extensions.size());
-    createInfo.ppEnabledExtensionNames = extensions.data();
-
-    if constexpr (gEnableValidationLayers)
-    {
-        createInfo.enabledLayerCount =
-            static_cast<std::uint32_t>(gValidationLayers.size());
-        createInfo.ppEnabledLayerNames = gValidationLayers.data();
-    }
-    else
-    {
-        createInfo.enabledLayerCount = 0;
-    }
-
-    // Note: because we didn't define VULKAN_HPP_NO_EXCEPTIONS, then this
-    // function (and pretty much all create functions) will throw. The
-    // alternative is to define VULKAN_HPP_NO_EXCEPTIONS, in which case we get a
-    // tuple back and we need to check the result manually. So this code
-    // becomes:
-    // auto [result, instance] = vk::createInstance(createInfo);
-    // if (result != vk::Result::eSuccess) { ... }
-    mInstance = vk::createInstance(createInfo);
+    setupDebugMessenger();
 }
 
 void HelloTriangleApplication::mainLoop()
@@ -134,90 +86,212 @@ void HelloTriangleApplication::mainLoop()
 
 void HelloTriangleApplication::cleanup()
 {
-    mInstance.destroy();
     glfwDestroyWindow(mWindow);
     glfwTerminate();
 }
 
-void HelloTriangleApplication::checkExtensions()
+void HelloTriangleApplication::initWindow()
 {
-    // This function is entirely optional, but it shows how we can enumerate all
-    // the extensions available and check to ensure that the required extensions
-    // exist. This needs to be called prior to the creation of the instance, and
-    // it's a good place to check if the minimum requirements are met.
+    glfwInit();
+
+    glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+    glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
+    mWindow = glfwCreateWindow(globals::windowWidth, globals::windowHeight,
+                               "Vulkan", nullptr, nullptr);
+}
+
+void HelloTriangleApplication::createInstance()
+{
+    // Struct holding the data from our application. This can be mostly left as
+    // is (with the sole exception of perhaps updating the API version as we go
+    // along). Note that this struct is optional, but its worthwhile setting it
+    // up so that the correct version is used.
+    vk::ApplicationInfo appInfo{"Hello Triangle", 1, "No engine", 1,
+                                VK_API_VERSION_1_1};
+
+    // Optional: List all the available extensions.
+    listExtensions();
+
+    // Optional: Check to ensure that all of the required validation layers
+    // exist.
+    if constexpr (globals::enableValidationLayers)
+    {
+        if (!checkLayers(
+                std::vector<const char*>(globals::validationLayers.begin(),
+                                         globals::validationLayers.end()),
+                vk::enumerateInstanceLayerProperties()))
+        {
+            throw std::runtime_error{
+                "error: there are missing required validation layers."};
+        }
+    }
+
+    auto extensionNames = getRequiredExtensions();
+
+    // This struct is NOT optional. It specifies all the information required to
+    // create the Vulkan instance. The parameters that the constructor requires
+    // (though keep in mind that all of them have default values assigned) are:
+    // 1. flags: These are the instance creation flags. They are empty and
+    // should be left as is.
+    // 2. appInfo: The pointer to the vk::ApplicationInfo struct we made
+    // earlier.
+    // 3. enabledLayerCount: The number of enabled validation layers.
+    // 4. enabledLayerNames: The names of the validation layers.
+    // 5. enabledExtensionCount: The number of extensions to enable.
+    // 6. enabledExtensionNames: The names of the extensions.
+    vk::InstanceCreateInfo createInfo{
+        vk::InstanceCreateFlags{},
+        &appInfo,
+        (globals::enableValidationLayers)
+            ? static_cast<std::uint32_t>(globals::validationLayers.size())
+            : 0,
+        (globals::enableValidationLayers) ? globals::validationLayers.data()
+                                          : nullptr,
+        static_cast<std::uint32_t>(extensionNames.size()),
+        extensionNames.data()};
+
+    auto debugCreateInfo = getDebugMessengerCreateInfo();
+    if constexpr (globals::enableValidationLayers)
+    {
+        createInfo.setPNext(&debugCreateInfo);
+    }
+
+    // Now that we have everything, we can create the instance.
+    mInstance = vk::createInstanceUnique(createInfo);
+}
+
+void HelloTriangleApplication::listExtensions()
+{
+    // This retrieves the list of extensions that are available. Notice that
+    // since we left the argument list empty, it will simply retrieve all
+    // extensions. If we wish to search for a particular extension, we can
+    // specify its name.
     std::vector<vk::ExtensionProperties> extensions =
         vk::enumerateInstanceExtensionProperties();
+
+    // Now print out the available extensions.
     for (auto const& extension : extensions)
     {
         fmt::print("{}\n", extension.extensionName);
     }
-
-    // Check to see if the extensions that GLFW requires are here. If any of
-    // them aren't there, throw an exception.
-    std::uint32_t glfwExtensionCount{0};
-    const char** glfwExtensions{nullptr};
-
-    glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
-    std::vector<std::string_view> glfwExtensionNames;
-    for (std::uint32_t i{0}; i < glfwExtensionCount; ++i)
-    {
-        glfwExtensionNames.push_back(glfwExtensions[i]);
-    }
-
-    std::uint32_t numSupportedExtensions{0};
-    for (std::size_t i{0}; i < glfwExtensionNames.size(); ++i)
-    {
-        auto name = glfwExtensionNames[i];
-        if (std::find_if(extensions.begin(), extensions.end(),
-                         [name](auto const& extension) {
-                             std::string_view extName{extension.extensionName};
-                             return extName == name;
-                         }) != extensions.end())
-        {
-            ++numSupportedExtensions;
-        }
-    }
-
-    if (numSupportedExtensions != glfwExtensionCount)
-    {
-        throw std::runtime_error{"error: system does not support the minimum "
-                                 "required Vulkan extensions."};
-    }
 }
 
-bool HelloTriangleApplication::checkValidationLayers()
+bool HelloTriangleApplication::checkExtensions(
+    std::vector<char const*> const& layers,
+    std::vector<vk::ExtensionProperties> const& properties)
 {
-    std::vector<vk::LayerProperties> availableLayers =
-        vk::enumerateInstanceLayerProperties();
+    return std::all_of(layers.begin(), layers.end(), [&properties](auto name) {
+        std::string_view layerName{name};
+        auto result =
+            std::find_if(properties.begin(), properties.end(),
+                         [&layerName](auto const& property) {
+                             std::string_view propName{property.extensionName};
+                             return layerName == propName;
+                         });
 
-    for (const char* layerName : gValidationLayers)
-    {
-        if (std::find_if(availableLayers.begin(), availableLayers.end(),
-                         [layerName](auto const& layerProperty) {
-                             std::string_view layer{layerProperty.layerName};
-                             std::string_view name{layerName};
-                             return layer == name;
-                         }) == availableLayers.end())
-        {
-            return false;
-        }
-    }
+        return result != properties.end();
+    });
+}
 
-    return true;
+bool HelloTriangleApplication::checkLayers(
+    std::vector<char const*> const& layers,
+    std::vector<vk::LayerProperties> const& properties)
+{
+    return std::all_of(layers.begin(), layers.end(), [&properties](auto name) {
+        std::string_view layerName{name};
+        auto result =
+            std::find_if(properties.begin(), properties.end(),
+                         [&layerName](auto const& property) {
+                             std::string_view propName{property.layerName};
+                             return layerName == propName;
+                         });
+
+        return result != properties.end();
+    });
 }
 
 std::vector<const char*> HelloTriangleApplication::getRequiredExtensions()
 {
+    // Because Vulkan is a platform agnostic API, we need an extension to
+    // interface with the OS window system. We can handle this easily with GLFW,
+    // which tells us which extensions are required.
     std::uint32_t glfwExtensionCount{0};
-    const char** glfwExtensions{nullptr};
-    glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
+    const char** glfwExtensionNames;
+    glfwExtensionNames = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
 
-    std::vector<const char*> extensions(glfwExtensions,
-                                        glfwExtensions + glfwExtensionCount);
-    if constexpr (gEnableValidationLayers)
+    std::vector<const char*> extensions(
+        glfwExtensionNames, glfwExtensionNames + glfwExtensionCount);
+
+    if constexpr (globals::enableValidationLayers)
     {
         extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
     }
 
+    // Optional: Check to ensure that all the required extensions are present.
+    if (!checkExtensions(extensions,
+                         vk::enumerateInstanceExtensionProperties()))
+    {
+        throw std::runtime_error{
+            "error: there are missing required extensions."};
+    }
+
     return extensions;
+}
+
+void HelloTriangleApplication::setupDebugMessenger()
+{
+    // Because the debug messenger is an extension, Vulkan does not load the
+    // function pointers by default. Instead, we have to manually load them
+    // ourselves. In particular, we need to load the pointers for the creation
+    // and destruction of the messenger.
+    globals::pfnVkCreateDebugUtilsMessengerEXT =
+        reinterpret_cast<PFN_vkCreateDebugUtilsMessengerEXT>(
+            mInstance->getProcAddr("vkCreateDebugUtilsMessengerEXT"));
+    if (!globals::pfnVkCreateDebugUtilsMessengerEXT)
+    {
+        throw std::runtime_error{"error: unable to find "
+                                 "pfnVkCreateDebugUtilsMessengerEXT function."};
+    }
+
+    globals::pfnVkDestroyDebugUtilsMessengerEXT =
+        reinterpret_cast<PFN_vkDestroyDebugUtilsMessengerEXT>(
+            mInstance->getProcAddr("vkDestroyDebugUtilsMessengerEXT"));
+    if (!globals::pfnVkDestroyDebugUtilsMessengerEXT)
+    {
+        throw std::runtime_error{
+            "error: unable to find "
+            "pfnVkDestroyDebugUtilsMessengerEXT function."};
+    }
+
+    mDebugMessenger = mInstance->createDebugUtilsMessengerEXTUnique(
+        getDebugMessengerCreateInfo());
+}
+
+vk::DebugUtilsMessengerCreateInfoEXT
+HelloTriangleApplication::getDebugMessengerCreateInfo()
+{
+    // These two setup the types of messages that we want to receive from
+    // Vulkan. To keep things simple, pretty much everything is enabled.
+    vk::DebugUtilsMessageSeverityFlagsEXT severityFlags{
+        vk::DebugUtilsMessageSeverityFlagBitsEXT::eVerbose |
+        vk::DebugUtilsMessageSeverityFlagBitsEXT::eWarning |
+        vk::DebugUtilsMessageSeverityFlagBitsEXT::eError};
+    vk::DebugUtilsMessageTypeFlagsEXT messageTypeFlags{
+        vk::DebugUtilsMessageTypeFlagBitsEXT::eGeneral |
+        vk::DebugUtilsMessageTypeFlagBitsEXT::ePerformance |
+        vk::DebugUtilsMessageTypeFlagBitsEXT::eValidation};
+
+    // This struct sets up the data we need to create the debug messenger.
+    // The parameters are (once more keeping in mind that all the parameters
+    // have default values):
+    // 1. flags: These are the messenger creation flags and should be left as
+    // is.
+    // 2. severityFlags: the flags denoting the message severity.
+    // 3. messageTypeFlags: the flags denoting the mssage type.
+    // 4. debugCallback: the pointer to the callback function.
+    // 5. userData: pointer to any custom user data we want to pass.
+    vk::DebugUtilsMessengerCreateInfoEXT createInfo{
+        {}, severityFlags, messageTypeFlags, &debugCallback, nullptr};
+
+    return createInfo;
 }
