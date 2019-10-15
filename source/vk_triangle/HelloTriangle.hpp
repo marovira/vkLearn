@@ -5,6 +5,8 @@
 
 #include <vulkan/vulkan.hpp>
 
+#include <optional>
+
 class HelloTriangleApplication
 {
 public:
@@ -32,6 +34,24 @@ private:
     vk::DebugUtilsMessengerCreateInfoEXT getDebugMessengerCreateInfo();
     void setupDebugMessenger();
 
+    struct QueueFamilyIndices
+    {
+        std::optional<std::uint32_t> graphicsFamily;
+        std::optional<std::uint32_t> presentFamily;
+
+        bool isComplete() const
+        {
+            return graphicsFamily.has_value() && presentFamily.has_value();
+        }
+    };
+    void pickPhysicalDevice();
+    bool isDeviceSuitable(vk::PhysicalDevice const& device);
+    QueueFamilyIndices findQueueFamilies(vk::PhysicalDevice const& device);
+
+    void createLogicalDevice();
+
+    void createSurface();
+
     GLFWwindow* mWindow{nullptr};
 
     // This is the interface between our application and Vulkan.
@@ -43,4 +63,39 @@ private:
     // whenever a validation layer issues a message. Similar to how
     // we made the instance, we don't have to worry about deleting this.
     vk::UniqueDebugUtilsMessengerEXT mDebugMessenger{};
+
+    // The physical device represents the actual physical graphics card that we
+    // are going to use. Note that the device is implicitly destroyed when we
+    // destroy the instance, so there's no need to do anything else with it.
+    vk::PhysicalDevice mPhysicalDevice{};
+
+    // If the physical device represents the graphics card, then the device (or
+    // logical device) is the interface into the physical device. Note that at
+    // no point will we be using the physical device directly. Instead, what
+    // we're going to do is interface through the logical device. This does
+    // mean that we can have multiple logical devices per physical device. This
+    // can be useful if different subsets, plugins or systems require their own
+    // Vulkan handles but don't need to be aware of the existence of other
+    // instances.
+    // Because the device doesn't interact with the instance, it needs to be
+    // handled (and destroyed) separately.
+    vk::UniqueDevice mDevice{};
+
+    // This is the handle to the device queue that gets created along with the
+    // logical device. Similarly to the physical device, it will get destroyed
+    // when the logical device is destroyed. This queue allows us to submit
+    // graphics commands.
+    vk::Queue mGraphicsQueue{};
+
+    // Vulkan is a platform agnostic API, so it has no direct way of interfacing
+    // with whatever windowing system is used to render things (and in fact it
+    // doesn't have to). To simplify the interface, Vulkan provides an
+    // abstraction in the form of the Surface, which is a general interface for
+    // rendering. It is important to note that while the surface itself is
+    // cross-platform, the creation of the surface itself isn't.
+    vk::UniqueSurfaceKHR mSurface{};
+
+    // This queue handle is for presentation and is involved in getting things
+    // on the surface that we created earlier.
+    vk::Queue mPresentQueue{};
 };

@@ -4,6 +4,7 @@
 #include <array>
 #include <fmt/printf.h>
 #include <functional>
+#include <set>
 
 namespace globals
 {
@@ -74,6 +75,9 @@ void HelloTriangleApplication::initVulkan()
 {
     createInstance();
     setupDebugMessenger();
+    createSurface();
+    pickPhysicalDevice();
+    createLogicalDevice();
 }
 
 void HelloTriangleApplication::mainLoop()
@@ -294,4 +298,163 @@ HelloTriangleApplication::getDebugMessengerCreateInfo()
         {}, severityFlags, messageTypeFlags, &debugCallback, nullptr};
 
     return createInfo;
+}
+
+void HelloTriangleApplication::pickPhysicalDevice()
+{
+    std::vector<vk::PhysicalDevice> devices =
+        mInstance->enumeratePhysicalDevices();
+    if (devices.empty())
+    {
+        throw std::runtime_error{
+            "error: there are no devices that support Vulkan."};
+    }
+
+    for (auto const& device : devices)
+    {
+        if (isDeviceSuitable(device))
+        {
+            mPhysicalDevice = device;
+            break;
+        }
+
+        if (mPhysicalDevice)
+        {
+            throw std::runtime_error{
+                "error: there are no devices that support Vulkan."};
+        }
+    }
+}
+
+bool HelloTriangleApplication::isDeviceSuitable(
+    vk::PhysicalDevice const& device)
+{
+    // A few notes on this function:
+    // Currently it is setup to be really simple and to only accept either
+    // discrete GPUs or integrated, but this can be easily extended to handle
+    // anything we wish. The device properties struct contains things like the
+    // type of device, API version, etc. while the device features struct
+    // contains the actual capabilities of the device. An interesting point here
+    // (for multi-GPU architectures) is that we can simply rank the devices
+    // based on whether they support the features we want and then select the
+    // highest score available.
+    vk::PhysicalDeviceProperties deviceProperties = device.getProperties();
+    vk::PhysicalDeviceFeatures deviceFeatures     = device.getFeatures();
+    auto indices                                  = findQueueFamilies(device);
+
+    return deviceProperties.deviceType ==
+               vk::PhysicalDeviceType::eDiscreteGpu ||
+           deviceProperties.deviceType ==
+                   vk::PhysicalDeviceType::eIntegratedGpu &&
+               indices.isComplete();
+}
+
+HelloTriangleApplication::QueueFamilyIndices
+HelloTriangleApplication::findQueueFamilies(vk::PhysicalDevice const& device)
+{
+    QueueFamilyIndices indices;
+
+    std::vector<vk::QueueFamilyProperties> queueFamilies =
+        device.getQueueFamilyProperties();
+    std::uint32_t i{0};
+    for (auto const& queueFamily : queueFamilies)
+    {
+        if (queueFamily.queueCount > 0 &&
+            queueFamily.queueFlags & vk::QueueFlagBits::eGraphics)
+        {
+            indices.graphicsFamily = i;
+        }
+
+        // Check to see if the queue family has support for presenting.
+        vk::Bool32 presetSupport = device.getSurfaceSupportKHR(i, *mSurface);
+        if (queueFamily.queueCount > 0 && presetSupport)
+        {
+            indices.presentFamily = i;
+        }
+        ++i;
+    }
+
+    return indices;
+}
+
+void HelloTriangleApplication::createLogicalDevice()
+{
+    auto indices = findQueueFamilies(mPhysicalDevice);
+
+    // It is perfectly possible for the queue indices of the
+    // graphics queue and presentation queues to be different. As such,
+    // we need to know how many queues we will need to create on the
+    // logical device.
+    std::vector<vk::DeviceQueueCreateInfo> queueCreateInfos;
+    std::set<std::uint32_t> uniqueQueueFamilies{*indices.graphicsFamily,
+                                                *indices.presentFamily};
+
+    float queuePriority{1.0f};
+    for (auto queueFamily : uniqueQueueFamilies)
+    {
+        // As usual, this struct contains the information required to create
+        // a device queue. The idea is that command buffers will submit their
+        // work into the device queue, which will then execute the specified
+        // commands. The parameters then are:
+        // 1. flags: The device creation flags that can be left as is.
+        // 2. queueFamilyIndex: The index of the queue family.
+        // 3. queueCount: The number of queues we want to create.
+        // 4. priority: The priority level in range 0.0f -> 1.0f.
+        //
+        // Note: there is a limited number of queues that can be created
+        // from a single device. In general, we only really need one, since
+        // the command buffers can be created across multiple threads.
+        vk::DeviceQueueCreateInfo queueCreateInfo{
+            {}, queueFamily, 1, &queuePriority};
+        queueCreateInfos.push_back(queueCreateInfo);
+    }
+
+    // This holds the features that we want our logical device to
+    // have. Note that not everything needs to be enabled. You are free
+    // to only enable the features that you actually need.
+    vk::PhysicalDeviceFeatures deviceFeatures{};
+
+    // Similar to the InstaceCreateInfo, this contains all the required
+    // information to create the logical device. The parameters are:
+    // 1. flags: The device creation flags and can be left as is.
+    // 2. queueCreateInfoCount: The number of create info queue structs.
+    // 3. pQueueCreateInfo: The pointer to the create info queue structs.
+    // 4. enabledLayerCount: The number of enabled layers.
+    // 5. ppEnabledLayerNames: The names of the layers to enable.
+    // 6. enabledExtensionCount: The number of extensions to enable.
+    // 7. ppEnabledExtensionNames: The names of the extensions to enable.
+    // 8. pEnabledFeatures: the pointer to the physical device features.
+    //
+    // Note that the extensions and layers we are enabling here are NOT the
+    // same we enabled before. These are per device, while the others are
+    // global. Now, in modern implementations (i.e. 1.1.12+), there is no
+    // longer any distinction between them, and as such the values set in
+    // the device create info are ignored. That being said, in order to remain
+    // backwards compatible with previous versions, we can set them anyway.
+    vk::DeviceCreateInfo createInfo{
+        {},
+        static_cast<std::uint32_t>(queueCreateInfos.size()),
+        queueCreateInfos.data(),
+        (globals::enableValidationLayers)
+            ? static_cast<std::uint32_t>(globals::validationLayers.size())
+            : 0,
+        (globals::enableValidationLayers) ? globals::validationLayers.data()
+                                          : nullptr,
+        0,
+        nullptr,
+        &deviceFeatures};
+    mDevice        = mPhysicalDevice.createDeviceUnique(createInfo);
+    mGraphicsQueue = mDevice->getQueue(*indices.graphicsFamily, 0);
+    mPresentQueue  = mDevice->getQueue(*indices.presentFamily, 0);
+}
+
+void HelloTriangleApplication::createSurface()
+{
+    VkSurfaceKHR surface = static_cast<VkSurfaceKHR>(*mSurface);
+    if (glfwCreateWindowSurface(*mInstance, mWindow, nullptr, &surface))
+    {
+        throw std::runtime_error{"error: could not create window surface."};
+    }
+
+    *mSurface = surface;
 }
