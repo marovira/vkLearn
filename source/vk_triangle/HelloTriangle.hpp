@@ -70,6 +70,8 @@ private:
     chooseSwapExtent(vk::SurfaceCapabilitiesKHR const& capabilities);
     void createSwapChain();
 
+    void createImageViews();
+
     GLFWwindow* mWindow{nullptr};
 
     // This is the interface between our application and Vulkan.
@@ -128,5 +130,13 @@ private:
 
     // The format of the swap chain images.
     vk::Format mSwapChainImageFormat{};
+
+    // The extent of the swap chain images.
     vk::Extent2D mSwapChainExtent{};
+
+    // If the swap chain holds the images we are rendering to,
+    // then the image view is the literal view into the image. Specifically,
+    // it describes how the image can be accessed, which part to access,
+    // and how to treat it.
+    std::vector<vk::UniqueImageView> mSwapChainImageViews{};
 };

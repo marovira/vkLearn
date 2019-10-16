@@ -7,6 +7,12 @@
 #include <limits>
 #include <set>
 
+// Some general notes:
+// Throughout this tutorial, we are using the full explicit initialization of
+// the Vulkan objects. This is merely to showcase what the parameters are as
+// well as provide some form of documentation on them. In practice, this may not
+// be readable and the individual parameters should be assigned separately.
+
 namespace globals
 {
     static constexpr auto windowWidth{800};
@@ -712,4 +718,44 @@ void HelloTriangleApplication::createSwapChain()
     mSwapChainImages      = mDevice->getSwapchainImagesKHR(*mSwapChain);
     mSwapChainImageFormat = surfaceFormat.format;
     mSwapChainExtent      = extent;
+}
+
+void HelloTriangleApplication::createImageViews()
+{
+    mSwapChainImageViews.resize(mSwapChainImages.size());
+
+    for (std::size_t i{0}; i < mSwapChainImages.size(); ++i)
+    {
+        // The components of the image view allow us to swizzle
+        // the individual channels around as we need to. Unless
+        // we are doing something really clever, this should
+        // probably be left as is. Each parameter represents each
+        // of the channels in our image.
+        vk::ComponentMapping components{
+            vk::ComponentSwizzle::eIdentity, vk::ComponentSwizzle::eIdentity,
+            vk::ComponentSwizzle::eIdentity, vk::ComponentSwizzle::eIdentity};
+
+        // THe resource range describes the purpose of the image and what parts
+        // of the image should be accessed. In the case of our images, we are
+        // going to be using colour targets without any mipmapping or multiple
+        // layers. The parameters then are:
+        // 1. aspectMask: the flags that control the type of image.
+        // 2. baseMipLevel: the base mipmap level.
+        // 3. levelCount: the number of mipmap levels.
+        // 4. baseArrayLayer: if we have multiple layers, then this is the first
+        // one.
+        // 5. layerCount: the number of layers.
+        vk::ImageSubresourceRange subresourceRange{
+            vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1};
+
+        vk::ImageViewCreateInfo createInfo{{},
+                                           mSwapChainImages[i],
+                                           vk::ImageViewType::e2D,
+                                           mSwapChainImageFormat,
+                                           components,
+                                           subresourceRange};
+
+        mSwapChainImageViews.emplace_back(
+            mDevice->createImageViewUnique(createInfo));
+    }
 }
