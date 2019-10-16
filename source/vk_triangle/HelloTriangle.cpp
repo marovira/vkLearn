@@ -456,5 +456,14 @@ void HelloTriangleApplication::createSurface()
         throw std::runtime_error{"error: could not create window surface."};
     }
 
-    *mSurface = surface;
+    // The surface is technically a child of the instance, and so it must be
+    // deleted prior to the deletion of the instance. If we simply do *mSurface
+    // = surface; it will copy the surface over (which is what we want), but it
+    // won't link the deleter of the surface with the instance. This then leads
+    // to either an exception being thrown by attempting to access a nullptr, or
+    // by the validation layers sending an error because we haven't deleted the
+    // surface. The solution is then to actually create the unique surface with
+    // the handle of the instance. Once all of this is done, everything works
+    // correctly.
+    mSurface = vk::UniqueSurfaceKHR{surface, *mInstance};
 }
