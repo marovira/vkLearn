@@ -4,6 +4,7 @@
 #include <array>
 #include <fmt/printf.h>
 #include <functional>
+#include <limits>
 #include <set>
 
 namespace globals
@@ -12,6 +13,8 @@ namespace globals
     static constexpr auto windowHeight{600};
     static constexpr std::array<const char*, 1> validationLayers{
         "VK_LAYER_KHRONOS_validation"};
+    static constexpr std::array<const char*, 1> deviceExtensions{
+        VK_KHR_SWAPCHAIN_EXTENSION_NAME};
 
 #if defined(NDEBUG)
     static constexpr auto enableValidationLayers{false};
@@ -342,11 +345,24 @@ bool HelloTriangleApplication::isDeviceSuitable(
     vk::PhysicalDeviceFeatures deviceFeatures     = device.getFeatures();
     auto indices                                  = findQueueFamilies(device);
 
-    return deviceProperties.deviceType ==
-               vk::PhysicalDeviceType::eDiscreteGpu ||
-           deviceProperties.deviceType ==
-                   vk::PhysicalDeviceType::eIntegratedGpu &&
-               indices.isComplete();
+    bool isDeviceValid =
+        deviceProperties.deviceType == vk::PhysicalDeviceType::eDiscreteGpu ||
+        deviceProperties.deviceType == vk::PhysicalDeviceType::eIntegratedGpu;
+    bool areExtensionsSupported = checkDeviceExtensionSupport(device);
+
+    // The existence of the swap chains does not actually imply that they are
+    // compatible with our surface. As a result, we first need to check
+    // that they are before they can be used.
+    bool isSwapChainAdequate{false};
+    if (areExtensionsSupported)
+    {
+        auto swapChainDetails = querySwapChainSupport(device);
+        isSwapChainAdequate   = !swapChainDetails.formats.empty() &&
+                              !swapChainDetails.presentModes.empty();
+    }
+
+    return isDeviceValid && indices.isComplete() && areExtensionsSupported &&
+           isSwapChainAdequate;
 }
 
 HelloTriangleApplication::QueueFamilyIndices
@@ -425,12 +441,14 @@ void HelloTriangleApplication::createLogicalDevice()
     // 7. ppEnabledExtensionNames: The names of the extensions to enable.
     // 8. pEnabledFeatures: the pointer to the physical device features.
     //
-    // Note that the extensions and layers we are enabling here are NOT the
-    // same we enabled before. These are per device, while the others are
-    // global. Now, in modern implementations (i.e. 1.1.12+), there is no
-    // longer any distinction between them, and as such the values set in
-    // the device create info are ignored. That being said, in order to remain
-    // backwards compatible with previous versions, we can set them anyway.
+    // Note that the extensions and layers we are enabling here are NOT the same
+    // we enabled before. These are per device, while the others are global.
+    // Now, in modern implementations (i.e. 1.1.12+), there is no longer any
+    // distinction between the validation layers of the device and those of the
+    // instance, as such the values set in the device create info are ignored.
+    // That being said, in order to remain backwards compatible with previous
+    // versions, we can set them anyway. Note however that extensions are still
+    // handled separately and they should be set accordingly.
     vk::DeviceCreateInfo createInfo{
         {},
         static_cast<std::uint32_t>(queueCreateInfos.size()),
@@ -440,8 +458,8 @@ void HelloTriangleApplication::createLogicalDevice()
             : 0,
         (globals::enableValidationLayers) ? globals::validationLayers.data()
                                           : nullptr,
-        0,
-        nullptr,
+        static_cast<std::uint32_t>(globals::deviceExtensions.size()),
+        globals::deviceExtensions.data(),
         &deviceFeatures};
     mDevice        = mPhysicalDevice.createDeviceUnique(createInfo);
     mGraphicsQueue = mDevice->getQueue(*indices.graphicsFamily, 0);
@@ -466,4 +484,232 @@ void HelloTriangleApplication::createSurface()
     // the handle of the instance. Once all of this is done, everything works
     // correctly.
     mSurface = vk::UniqueSurfaceKHR{surface, *mInstance};
+}
+
+bool HelloTriangleApplication::checkDeviceExtensionSupport(
+    vk::PhysicalDevice const& device)
+{
+    // Similarly to how we checked whether the global instance had support for
+    // the extensions we required, we also need to check if the device has
+    // support for specific extensions. For rendering, we require support for
+    // the swap chain. Since this is a device specific extension (as opposed to
+    // a global one) we check this here.
+    std::vector<vk::ExtensionProperties> availableExtensions =
+        device.enumerateDeviceExtensionProperties();
+    std::set<std::string> requiredExtensions(globals::deviceExtensions.begin(),
+                                             globals::deviceExtensions.end());
+
+    for (auto const& extension : availableExtensions)
+    {
+        requiredExtensions.erase(extension.extensionName);
+    }
+
+    return requiredExtensions.empty();
+}
+
+HelloTriangleApplication::SwapChainSupportDetails
+HelloTriangleApplication::querySwapChainSupport(
+    vk::PhysicalDevice const& device)
+{
+    SwapChainSupportDetails details;
+    details.capabilities = device.getSurfaceCapabilitiesKHR(*mSurface);
+    details.formats      = device.getSurfaceFormatsKHR(*mSurface);
+    details.presentModes = device.getSurfacePresentModesKHR(*mSurface);
+
+    return details;
+}
+
+vk::SurfaceFormatKHR HelloTriangleApplication::chooseSwapSurfaceFormat(
+    std::vector<vk::SurfaceFormatKHR> const& availableFormats)
+{
+    // For this particular example, we are going to be needing a swap chain that
+    // supports 8-bit RGBA for the colour format and SRGB for the colour space.
+    // Similar to how we can rank the devices depending on whether they support
+    // what we want or not, we can also rank the formats here. For the most part
+    // though, we can simply grab the first one that meets our needs.
+    for (auto const& availableFormat : availableFormats)
+    {
+        if (availableFormat.format == vk::Format::eB8G8R8A8Unorm &&
+            availableFormat.colorSpace == vk::ColorSpaceKHR::eSrgbNonlinear)
+        {
+            return availableFormat;
+        }
+    }
+
+    return availableFormats[0];
+}
+
+vk::PresentModeKHR HelloTriangleApplication::chooseSwapPresentMode(
+    std::vector<vk::PresentModeKHR> const& availablePresentModes)
+{
+    // Here we set under which conditions we swap our images and showing them to
+    // the screen. Our options are:
+    // * eImmediate: images submitted are transferred right away. May result in
+    // tearing.
+    // * eFifo: The swap chain is a queue and we take images from the front of
+    // the queue to present while rendering happens on the back. This is the
+    // most similar to vertical sync and double buffering.
+    // * eFifoRelaced: Identical to fifo save for the case of when the queue is
+    // empty and the application is late. In that case, the frame is transferred
+    // right away, which may result in tearing.
+    // * eMailbox: a variation on fifo. The idea is that if the queue is full,
+    // we don't block the main application. Instead the images that are already
+    // in the queue are replaced with the new ones. This allows us to implement
+    // triple buffering for less tearing at less latency.
+    for (auto const& availablePresentMode : availablePresentModes)
+    {
+        if (availablePresentMode == vk::PresentModeKHR::eMailbox)
+        {
+            return availablePresentMode;
+        }
+    }
+
+    return vk::PresentModeKHR::eFifo;
+}
+
+vk::Extent2D HelloTriangleApplication::chooseSwapExtent(
+    vk::SurfaceCapabilitiesKHR const& capabilities)
+{
+    // The swap extent is the resolution of the images in the swap chain and is
+    // almost always the same size as the window we are rendering to. Keep in
+    // mind that depending on the window manager we may have some variation on
+    // the sizes, and so we use max of uint32_t to specify this.
+    if (capabilities.currentExtent.width !=
+        std::numeric_limits<std::uint32_t>::max())
+    {
+        return capabilities.currentExtent;
+    }
+    else
+    {
+        vk::Extent2D actualExtent = {globals::windowWidth,
+                                     globals::windowHeight};
+
+        actualExtent.width = std::max(
+            capabilities.minImageExtent.width,
+            std::min(capabilities.maxImageExtent.width, actualExtent.width));
+        actualExtent.height = std::max(
+            capabilities.minImageExtent.height,
+            std::min(capabilities.maxImageExtent.height, actualExtent.height));
+
+        return actualExtent;
+    }
+}
+
+void HelloTriangleApplication::createSwapChain()
+{
+    // Vulkan does not support a framebuffer by default. Instead what we have
+    // to do is create the default framebuffer, and all the setup it requires.
+    // The swap chain is then the chain of images that we can swap for
+    // performing things like double buffering. Now that we know that the swap
+    // chain is supported, we need to create it. To do this, we first need to
+    // query for the best settings (or nearest to) so that we can populate the
+    // creation struct. We need to determine the following 3 settings:
+    // 1. Surface format: controls the colour depth,
+    // 2. Presentation mode: conditions for "swapping" images to the screen, and
+    // 3. Swap extent: resolution of images in swap chain.
+    //
+    SwapChainSupportDetails swapChainDetails =
+        querySwapChainSupport(mPhysicalDevice);
+
+    vk::SurfaceFormatKHR surfaceFormat =
+        chooseSwapSurfaceFormat(swapChainDetails.formats);
+    vk::PresentModeKHR presentMode =
+        chooseSwapPresentMode(swapChainDetails.presentModes);
+    vk::Extent2D extent = chooseSwapExtent(swapChainDetails.capabilities);
+
+    // We now need to specify the size of the swap chain. As a general rule of
+    // thumb, its always better to have one more than the minimum available
+    // size. That being said, certain devices allow the swap chains to have no
+    // limit, which is represented by a size of 0. The check here ensures that
+    // we don't exceed the maximum size (if there is one).
+    std::uint32_t imageCount = swapChainDetails.capabilities.minImageCount + 1;
+    if (swapChainDetails.capabilities.maxImageCount > 0 &&
+        imageCount > swapChainDetails.capabilities.maxImageCount)
+    {
+        imageCount = swapChainDetails.capabilities.maxImageCount;
+    }
+
+    // Recall that we created two queue families: one for presentation and one
+    // for graphics. Given that we have two handles, these can either be
+    // distinct or equal. This means that we have to tell the swap chain whether
+    // the images are going to be used across several queue families or not.
+    // There are two options:
+    // 1. SharingMode::eExclusive: images are owned by a single queue and must
+    // be explicitly transferred between queues before use. Offers the best
+    // performance.
+    // 2. SharingMode::eConcurrent: images can be shared across queue families
+    // without explicit ownership transfers.
+    //
+    // For the time being we are going to be using the second option for the
+    // sake of simplicity. In this case, we need to specify in advance which
+    // queue families are going to be sharing ownership. If the graphics and
+    // presentation are the same, then we should use exclusive mode. Here we
+    // grab the indices of the queue families.
+    QueueFamilyIndices indices = findQueueFamilies(mPhysicalDevice);
+    std::array<std::uint32_t, 2> queueFamilies{*indices.graphicsFamily,
+                                               *indices.presentFamily};
+
+    vk::SharingMode sharingMode;
+    std::uint32_t queueFamilyIndexCount{0};
+    const std::uint32_t* queueFamilyIndices{nullptr};
+    if (*indices.graphicsFamily != *indices.presentFamily)
+    {
+        sharingMode = vk::SharingMode::eConcurrent;
+        queueFamilyIndexCount =
+            static_cast<std::uint32_t>(queueFamilies.size());
+        queueFamilyIndices = queueFamilies.data();
+    }
+    else
+    {
+        sharingMode = vk::SharingMode::eExclusive;
+    }
+
+    // Same pattern as before. We create the image struct that holds the
+    // creation data for the swap chain. Parameters are:
+    // 1. surface: the surface we created previously,
+    // 2. minImageCount: The number of images in the swap chain,
+    // 3. imageFormat: the surface format we specify,
+    // 4. imageColorSpace: the surface colour space we specify,
+    // 5. iamgeExtent: the size of the images in the swap chain,
+    // 6. imageArrayLayers: the number of layers each image consists of.
+    // 7. imageUsage: Specifies how we are going to use the images.
+    // 8. sharingMode: Specifies how images are shared amongst queues.
+    // 9. queueFamilyIndexCount: the number of queue families.
+    // 10. queueFamilyIndeces: the indices of the queue families.
+    // 11. preTransform: the type of stransform we want to apply to images on
+    // the swap chain (if any).
+    // 12. compositeAlpha: whether the alpha channel should be used to blend
+    // with other windows.
+    // 13. presentMode: the way the images are presented.
+    // 14. clipped: if true, then we don't care about the pixels that are
+    // obscured by another window (for example). Should probably be left as
+    // true.
+    // 15. oldSwapChain: if our current swap chain becomes invalid and we need
+    // to recreate it, we must provide the pointer to the old one here.
+    //
+    // Note that the number of layers per image will always be 1 unless we are
+    // doing stereoscopic 3D. In the case of the imageUsage, if we are going
+    // to be rendering to a separate image for post-processing and then copying
+    // over to the swap chain, we would use ImageUsageFlagBits::eTransferDST
+    vk::SwapchainCreateInfoKHR createInfo{
+        {},
+        *mSurface,
+        imageCount,
+        surfaceFormat.format,
+        surfaceFormat.colorSpace,
+        extent,
+        1,
+        vk::ImageUsageFlagBits::eColorAttachment,
+        sharingMode,
+        queueFamilyIndexCount,
+        queueFamilyIndices,
+        vk::SurfaceTransformFlagBitsKHR::eIdentity,
+        vk::CompositeAlphaFlagBitsKHR::eOpaque,
+        presentMode,
+        true};
+
+    mSwapChain            = mDevice->createSwapchainKHRUnique(createInfo);
+    mSwapChainImages      = mDevice->getSwapchainImagesKHR(*mSwapChain);
+    mSwapChainImageFormat = surfaceFormat.format;
+    mSwapChainExtent      = extent;
 }

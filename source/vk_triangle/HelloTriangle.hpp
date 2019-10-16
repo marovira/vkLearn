@@ -52,6 +52,24 @@ private:
 
     void createSurface();
 
+    struct SwapChainSupportDetails
+    {
+        vk::SurfaceCapabilitiesKHR capabilities;
+        std::vector<vk::SurfaceFormatKHR> formats;
+        std::vector<vk::PresentModeKHR> presentModes;
+    };
+
+    bool checkDeviceExtensionSupport(vk::PhysicalDevice const& device);
+    SwapChainSupportDetails
+    querySwapChainSupport(vk::PhysicalDevice const& device);
+    vk::SurfaceFormatKHR chooseSwapSurfaceFormat(
+        std::vector<vk::SurfaceFormatKHR> const& availableFormats);
+    vk::PresentModeKHR chooseSwapPresentMode(
+        std::vector<vk::PresentModeKHR> const& availablePresentModes);
+    vk::Extent2D
+    chooseSwapExtent(vk::SurfaceCapabilitiesKHR const& capabilities);
+    void createSwapChain();
+
     GLFWwindow* mWindow{nullptr};
 
     // This is the interface between our application and Vulkan.
@@ -98,4 +116,17 @@ private:
     // This queue handle is for presentation and is involved in getting things
     // on the surface that we created earlier.
     vk::Queue mPresentQueue{};
+
+    // The swap chain is the one that holds the images that will be presented
+    // to the screen, effectively creating the setup for the default
+    // framebuffer and techniques like double buffering.
+    vk::UniqueSwapchainKHR mSwapChain{};
+
+    // This will hold the images from the swap chain. Since they are
+    // cleaned up along with the swap chain, we don't need to do anything extra.
+    std::vector<vk::Image> mSwapChainImages{};
+
+    // The format of the swap chain images.
+    vk::Format mSwapChainImageFormat{};
+    vk::Extent2D mSwapChainExtent{};
 };
