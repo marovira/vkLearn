@@ -72,6 +72,9 @@ private:
 
     void createImageViews();
 
+    void createGraphicsPipeline();
+    vk::UniqueShaderModule createShaderModule(std::vector<char> const& code);
+
     GLFWwindow* mWindow{nullptr};
 
     // This is the interface between our application and Vulkan.

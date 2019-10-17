@@ -1,8 +1,10 @@
 #include "HelloTriangle.hpp"
+#include "Paths.hpp"
 
 #include <algorithm>
 #include <array>
 #include <fmt/printf.h>
+#include <fstream>
 #include <functional>
 #include <limits>
 #include <set>
@@ -72,6 +74,25 @@ VKAPI_ATTR void VKAPI_CALL vkDestroyDebugUtilsMessengerEXT(
                                                        pAllocator);
 }
 
+static std::vector<char> readFile(std::string const& filename)
+{
+    std::ifstream file{filename, std::ios::ate | std::ios::binary};
+
+    if (!file.is_open())
+    {
+        std::string message =
+            fmt::format("error: unable to open file {}.", filename);
+        throw std::runtime_error{message};
+    }
+
+    std::size_t fileSize = static_cast<std::size_t>(file.tellg());
+    std::vector<char> buffer(fileSize);
+    file.seekg(0);
+    file.read(buffer.data(), fileSize);
+    file.close();
+    return buffer;
+}
+
 void HelloTriangleApplication::run()
 {
     initWindow();
@@ -87,6 +108,9 @@ void HelloTriangleApplication::initVulkan()
     createSurface();
     pickPhysicalDevice();
     createLogicalDevice();
+    createSwapChain();
+    createImageViews();
+    createGraphicsPipeline();
 }
 
 void HelloTriangleApplication::mainLoop()
@@ -758,4 +782,54 @@ void HelloTriangleApplication::createImageViews()
         mSwapChainImageViews.emplace_back(
             mDevice->createImageViewUnique(createInfo));
     }
+}
+
+void HelloTriangleApplication::createGraphicsPipeline()
+{
+    std::string root{ShaderPath};
+    auto vertexShaderCode   = readFile(root + "triangle.vert.spv");
+    auto fragmentShaderCode = readFile(root + "triangle.frag.spv");
+
+    vk::UniqueShaderModule vertModule = createShaderModule(vertexShaderCode);
+    vk::UniqueShaderModule fragModule = createShaderModule(fragmentShaderCode);
+
+    // This is very similar to OpenGL, where the shaders need to
+    // be given a type. In this case, we do this with another create info
+    // struct. The parameters are then:
+    // 1. flags: leave as is.
+    // 2. stage: The stage that the shader fits in.
+    // 3. module: The module for that shader.
+    // 4. name: The name of the entrypoint into the shader. This means that we
+    // can bundle several entry points under a single shader and just change the
+    // entry point here.
+    // 5. specializationInfo: this allows us to control the values of constants
+    // in order to optimize as early as possible the layout of the shader
+    // itself.
+    vk::PipelineShaderStageCreateInfo vertShaderInfo{
+        {}, vk::ShaderStageFlagBits::eVertex, *vertModule, "main"};
+    vk::PipelineShaderStageCreateInfo fragShaderInfo{
+        {}, vk::ShaderStageFlagBits::eFragment, *fragModule, "main"};
+
+    std::array<vk::PipelineShaderStageCreateInfo, 2>{vertShaderInfo,
+                                                     fragShaderInfo};
+}
+
+vk::UniqueShaderModule
+HelloTriangleApplication::createShaderModule(std::vector<char> const& code)
+{
+    // The shader module is basically a wrapper around the shader code itself.
+    // In this it is very similar to the shaders from OpenGL. The parameters
+    // of the struct are very simple:
+    // 1. flags: left as is.
+    // 2. codeSize: the size of the buffer containing the SPIR-V code.
+    // 3. code: the pointer to the code.
+    //
+    // Note that the code needs to be a buffer of std::uint32_t. If we use
+    // vectors with char, then everything will line up correctly.
+    vk::ShaderModuleCreateInfo createInfo{
+        {}, code.size(), reinterpret_cast<std::uint32_t const*>(code.data())};
+
+    vk::UniqueShaderModule shaderModule =
+        mDevice->createShaderModuleUnique(createInfo);
+    return shaderModule;
 }
