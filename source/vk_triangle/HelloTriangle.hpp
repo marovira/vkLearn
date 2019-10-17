@@ -142,4 +142,8 @@ private:
     // it describes how the image can be accessed, which part to access,
     // and how to treat it.
     std::vector<vk::UniqueImageView> mSwapChainImageViews{};
+
+    // This holds the layout for any uniform variables that exist in our
+    // pipeline.
+    vk::UniquePipelineLayout mPipelineLayout{};
 };

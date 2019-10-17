@@ -810,8 +810,148 @@ void HelloTriangleApplication::createGraphicsPipeline()
     vk::PipelineShaderStageCreateInfo fragShaderInfo{
         {}, vk::ShaderStageFlagBits::eFragment, *fragModule, "main"};
 
-    std::array<vk::PipelineShaderStageCreateInfo, 2>{vertShaderInfo,
-                                                     fragShaderInfo};
+    std::array<vk::PipelineShaderStageCreateInfo, 2> shaderStages{
+        vertShaderInfo, fragShaderInfo};
+
+    // We need a way of describing the format of the vertex data that is being
+    // sent to the vertex shader (similar to the attribute bindings in the vao
+    // from OpenGL). To do this we use the struct below to specify the data.
+    // The input paramaters are:
+    // 1. flags: leave as is.
+    // 2. vertexBindingsDescriptionCount: the number of vertex bindings.
+    // 3. vertexBindingDescriptions: pointer to the vertex binding structures.
+    // 4. vertexAttributeDescriptionCount: the number of vertex attributes.
+    // 5. vertexAttributeDescriptions: pointer to the vertex attribute
+    // structures.
+    vk::PipelineVertexInputStateCreateInfo vertexInputInfo{
+        {}, 0, nullptr, 0, nullptr};
+
+    // Now that we know how the data in the vertex shader is laid out, we need
+    // to specify what kind of geometry will be rendered so the assembler
+    // can take care of it. The parameters are:
+    // 1. flats: leave as is.
+    // 2. topology: the type of primitive we are rendering.
+    // 3. primitiveRestartEnable: Allows us to break up the primitives into
+    // chunks.
+    vk::PipelineInputAssemblyStateCreateInfo inputAssembly{
+        {}, vk::PrimitiveTopology::eTriangleList, VK_FALSE};
+
+    // Now we need to setup our viewport. This is going to be very similar to
+    // how we set up the viewport in OpenGL, with the addition that we also have
+    // to specify the depth range for the depth buffer. Unless something clever
+    // is being done, leave in the range 0 to 1. The parameters are:
+    // 1. x: the origin's x-coordinate.
+    // 2. y: the origin's y-coordinate.
+    // 3. width: width of the viewport.
+    // 4. height: height of the viewport.
+    // 5. minDepth: the minimum depth (must be at least 0).
+    // 6. maxDepth: the maximum depth (must be at most 1).
+    //
+    // Note that in Vulkan the origin of the viewport is set on the
+    // top-left corner, as opposed to the bottom-left of OpenGL. If we wish to
+    // use the same setups that we had with OpenGL, then we have to make the
+    // following changes here:
+    // 1. The height of the viewport must be negative,
+    // 2. The y coordinate of the viewport must be the height of the extent.
+    vk::Viewport viewport{0.0f,
+                          0.0f,
+                          static_cast<float>(mSwapChainExtent.width),
+                          static_cast<float>(mSwapChainExtent.height),
+                          0.0f,
+                          1.0f};
+
+    // Next we setup the scissor rectangle. Since we want to draw the entire
+    // framebuffer, we just initialize it to the same size as the extent.
+    vk::Rect2D scissor{{0, 0}, mSwapChainExtent};
+
+    // We have the viewport specifications as well as the scissor rectangle, so
+    // we are now ready to combine the two into the viewport state. The
+    // parameters are:
+    // 1. flags: leave as is.
+    // 2. viewportCount: the number of viewports.
+    // 3. viewports: pointer to the list of viewports.
+    // 4. scissorCount: the number of scissor rects.
+    // 5. scissors: pointer to the list of scissor rects.
+    vk::PipelineViewportStateCreateInfo viewportState{
+        {}, 1, &viewport, 1, &scissor};
+
+    // The viewport is setup, so the next thing to create is the rasterizer
+    // stage. The parameters are:
+    // 1. flags: leave as is.
+    // 2. depthClampEnable: discards fragments beyond the near and far planes.
+    // Requires enabling a GPU feature.
+    // 3. rasterizerDiscardEnable: disables any and all output to the
+    // framebuffer.
+    // 4. polygonMode: same as OpenGL.
+    // 5. cullMode: same as OpenGL.
+    // 6. frontFace: same as OpenGL.
+    // 7. depthBiasEnable: enables depth shifting.
+    // 8. depthBiasConstantFactor: factor for depth shifting.
+    // 9. depthBiasClamp: ditto.
+    // 10. depthBiasSlopeFactor: ditto.
+    // 11. lineWidth: width (in pixels) of lines.
+    vk::PipelineRasterizationStateCreateInfo rasterizer{
+        {},
+        VK_FALSE,
+        VK_FALSE,
+        vk::PolygonMode::eFill,
+        vk::CullModeFlagBits::eBack,
+        vk::FrontFace::eClockwise,
+        VK_FALSE,
+        0.0f,
+        0.0f,
+        0.0f,
+        1.0f};
+
+    // Next is the multisampling portion which is used for anti-aliasing. For
+    // now we will keep this disabled.
+    vk::PipelineMultisampleStateCreateInfo multisampling{
+        {},      vk::SampleCountFlagBits::e1, VK_FALSE, 1.0f, nullptr, VK_FALSE,
+        VK_FALSE};
+
+    // If we require any depth or stencil buffers, they would get configured
+    // here. Since we don't need them for the time being, let's leave them
+    // alone.
+
+    // Next come colour blending settings. These are similar to the blend
+    // functions that OpenGL has. The important point to note here is that these
+    // settings are per attached framebuffer. There's an alternative struct
+    // called vk::PipelineColorBlendStateCreateInfo which contains the global
+    // colour blending settings.
+    vk::PipelineColorBlendAttachmentState colourBlendAttachment{
+        VK_FALSE,
+        vk::BlendFactor::eOne,
+        vk::BlendFactor::eZero,
+        vk::BlendOp::eAdd,
+        vk::BlendFactor::eOne,
+        vk::BlendFactor::eZero,
+        vk::BlendOp::eAdd,
+        vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG |
+            vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA};
+
+    // We have the per-framebuffer settings, so now we create the global
+    // settings for the entire swap chain.
+    vk::PipelineColorBlendStateCreateInfo colourBlending{
+        {}, VK_FALSE, vk::LogicOp::eCopy, 1, &colourBlendAttachment};
+
+    // The last piece is to designate all the dynamic state in the pipeline.
+    // In particular, the viewport, line width, and blend constants. The rest
+    // are static. We can do this as follows:
+    std::array<vk::DynamicState, 2> dynamicStates{vk::DynamicState::eViewport,
+                                                  vk::DynamicState::eLineWidth};
+
+    vk::PipelineDynamicStateCreateInfo dynamicState{
+        {},
+        static_cast<std::uint32_t>(dynamicStates.size()),
+        dynamicStates.data()};
+
+    // Now that we have the pipeline, we can set the layout of our uniform
+    // variables.
+    vk::PipelineLayoutCreateInfo pipelineLayoutCreateInfo{
+        {}, 0, nullptr, 0, nullptr};
+
+    mPipelineLayout =
+        mDevice->createPipelineLayoutUnique(pipelineLayoutCreateInfo);
 }
 
 vk::UniqueShaderModule
