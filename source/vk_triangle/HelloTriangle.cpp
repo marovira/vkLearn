@@ -110,6 +110,7 @@ void HelloTriangleApplication::initVulkan()
     createLogicalDevice();
     createSwapChain();
     createImageViews();
+    createRenderPass();
     createGraphicsPipeline();
 }
 
@@ -972,4 +973,29 @@ HelloTriangleApplication::createShaderModule(std::vector<char> const& code)
     vk::UniqueShaderModule shaderModule =
         mDevice->createShaderModuleUnique(createInfo);
     return shaderModule;
+}
+
+void HelloTriangleApplication::createRenderPass()
+{
+    vk::AttachmentDescription colourAttachment{{},
+                                               mSwapChainImageFormat,
+                                               vk::SampleCountFlagBits::e1,
+                                               vk::AttachmentLoadOp::eClear,
+                                               vk::AttachmentStoreOp::eStore,
+                                               vk::AttachmentLoadOp::eDontCare,
+                                               vk::AttachmentStoreOp::eDontCare,
+                                               vk::ImageLayout::eUndefined,
+                                               vk::ImageLayout::ePresentSrcKHR};
+
+    vk::AttachmentReference colourAttachmentRef{
+        0, vk::ImageLayout::eColorAttachmentOptimal};
+
+    vk::SubpassDescription subpass{{}, vk::PipelineBindPoint::eGraphics,
+                                   0,  nullptr,
+                                   1,  &colourAttachmentRef};
+
+    vk::RenderPassCreateInfo renderPassInfo{
+        {}, 1, &colourAttachment, 1, &subpass};
+
+    mRenderPass = mDevice->createRenderPassUnique(renderPassInfo);
 }

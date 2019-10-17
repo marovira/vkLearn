@@ -75,6 +75,8 @@ private:
     void createGraphicsPipeline();
     vk::UniqueShaderModule createShaderModule(std::vector<char> const& code);
 
+    void createRenderPass();
+
     GLFWwindow* mWindow{nullptr};
 
     // This is the interface between our application and Vulkan.
@@ -142,6 +144,11 @@ private:
     // it describes how the image can be accessed, which part to access,
     // and how to treat it.
     std::vector<vk::UniqueImageView> mSwapChainImageViews{};
+
+    // Handle to the render pass, which describes the framebuffer attachments,
+    // number of colour and depth buffers, samples, and how their contents are
+    // supposed to be handled.
+    vk::UniqueRenderPass mRenderPass{};
 
     // This holds the layout for any uniform variables that exist in our
     // pipeline.
