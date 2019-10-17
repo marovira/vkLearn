@@ -953,6 +953,27 @@ void HelloTriangleApplication::createGraphicsPipeline()
 
     mPipelineLayout =
         mDevice->createPipelineLayoutUnique(pipelineLayoutCreateInfo);
+
+    vk::GraphicsPipelineCreateInfo pipelineInfo{
+        {},
+        static_cast<std::uint32_t>(shaderStages.size()),
+        shaderStages.data(),
+        &vertexInputInfo,
+        &inputAssembly,
+        nullptr,
+        &viewportState,
+        &rasterizer,
+        &multisampling,
+        nullptr,
+        &colourBlending,
+        nullptr,
+        *mPipelineLayout,
+        *mRenderPass,
+        0,
+        {},
+        -1};
+
+    mGraphicsPipeline = mDevice->createGraphicsPipelineUnique({}, pipelineInfo);
 }
 
 vk::UniqueShaderModule

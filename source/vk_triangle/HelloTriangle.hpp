@@ -153,4 +153,6 @@ private:
     // This holds the layout for any uniform variables that exist in our
     // pipeline.
     vk::UniquePipelineLayout mPipelineLayout{};
+
+    vk::UniquePipeline mGraphicsPipeline{};
 };
