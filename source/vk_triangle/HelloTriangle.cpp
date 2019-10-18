@@ -113,14 +113,20 @@ void HelloTriangleApplication::initVulkan()
     createRenderPass();
     createGraphicsPipeline();
     createFramebuffers();
+    createCommandPool();
+    createCommandBuffers();
+    createSemaphores();
 }
 
 void HelloTriangleApplication::mainLoop()
 {
     while (!glfwWindowShouldClose(mWindow))
     {
+        drawFrame();
         glfwPollEvents();
     }
+
+    mDevice->waitIdle();
 }
 
 void HelloTriangleApplication::cleanup()
@@ -1017,8 +1023,17 @@ void HelloTriangleApplication::createRenderPass()
                                    0,  nullptr,
                                    1,  &colourAttachmentRef};
 
-    vk::RenderPassCreateInfo renderPassInfo{
-        {}, 1, &colourAttachment, 1, &subpass};
+    vk::SubpassDependency dependency{
+        VK_SUBPASS_EXTERNAL,
+        0,
+        vk::PipelineStageFlagBits::eColorAttachmentOutput,
+        vk::PipelineStageFlagBits::eColorAttachmentOutput,
+        {},
+        vk::AccessFlagBits::eColorAttachmentRead |
+            vk::AccessFlagBits::eColorAttachmentWrite};
+
+    vk::RenderPassCreateInfo renderPassInfo{{},       1, &colourAttachment, 1,
+                                            &subpass, 1, &dependency};
 
     mRenderPass = mDevice->createRenderPassUnique(renderPassInfo);
 }
@@ -1044,4 +1059,125 @@ void HelloTriangleApplication::createFramebuffers()
         mSwapChainFramebuffers[i] =
             mDevice->createFramebufferUnique(framebufferInfo);
     }
+}
+
+void HelloTriangleApplication::createCommandPool()
+{
+    QueueFamilyIndices queueFamilyIndices = findQueueFamilies(mPhysicalDevice);
+
+    vk::CommandPoolCreateInfo poolInfo{{}, *queueFamilyIndices.graphicsFamily};
+    mCommandPool = mDevice->createCommandPoolUnique(poolInfo);
+}
+
+void HelloTriangleApplication::createCommandBuffers()
+{
+    mCommandBuffers.resize(mSwapChainFramebuffers.size());
+
+    // The level parameter in the command buffer specifies the following
+    // behaviour:
+    // 1. Primary: can be submitted to a queue for execution, but cannot be
+    // called from other command buffers.
+    // 2. Secondary: cannot be submitted directly, but can be called from a
+    // primary command buffer.
+    vk::CommandBufferAllocateInfo allocInfo{
+        *mCommandPool, vk::CommandBufferLevel::ePrimary,
+        static_cast<std::uint32_t>(mCommandBuffers.size())};
+
+    mCommandBuffers = mDevice->allocateCommandBuffersUnique(allocInfo);
+
+    for (std::size_t i{0}; i < mCommandBuffers.size(); ++i)
+    {
+        // Before we begin, let's create the info struct for the command buffer
+        // that will hold our commands. Once we have that, we can set the
+        // command buffer so it starts recording things.
+        vk::CommandBufferBeginInfo beginInfo{{}, nullptr};
+        mCommandBuffers[i]->begin(beginInfo);
+
+        // Next comes the equivalent of glClearColor. We specify the colour
+        // value, along with the information about the dimensions of the
+        // framebuffers, and the renderpass.
+        vk::ClearValue clearValue{};
+        clearValue.color =
+            vk::ClearColorValue{std::array<float, 4>{0.0f, 0.0f, 0.0f, 1.0f}};
+        vk::RenderPassBeginInfo renderPassInfo{
+            *mRenderPass, *mSwapChainFramebuffers[i],
+            vk::Rect2D{{0, 0}, mSwapChainExtent}, 1, &clearValue};
+
+        // We now begin the render pass.
+        mCommandBuffers[i]->beginRenderPass(&renderPassInfo,
+                                            vk::SubpassContents::eInline);
+
+        // First thing we need to do is bind the graphics pipeline.
+        mCommandBuffers[i]->bindPipeline(vk::PipelineBindPoint::eGraphics,
+                                         *mGraphicsPipeline);
+
+        // Since the shaders already contain all the information, just tell
+        // Vulkan to render everything. This is going to be very similar to
+        // OpenGL drawBuffers command.
+        mCommandBuffers[i]->draw(3, 1, 0, 0);
+
+        // We are done, so end the render pass.
+        mCommandBuffers[i]->endRenderPass();
+
+        // And close off the command buffer. Note that any error checking will
+        // be done at this point.
+        mCommandBuffers[i]->end();
+    }
+}
+
+void HelloTriangleApplication::createSemaphores()
+{
+    vk::SemaphoreCreateInfo semaphoreInfo{};
+    mImageAvailableSemaphore = mDevice->createSemaphoreUnique(semaphoreInfo);
+    mRenderFinishedSemaphore = mDevice->createSemaphoreUnique(semaphoreInfo);
+}
+
+void HelloTriangleApplication::drawFrame()
+{
+    // First things first, we need to acquire an image from the swap chain. We
+    // can specify a timeout if we wish, but for now we'll disable it, and we'll
+    // use our semaphore to synchronize access with the images.
+    auto result = mDevice->acquireNextImageKHR(
+        *mSwapChain, std::numeric_limits<std::uint32_t>::max(),
+        *mImageAvailableSemaphore, {});
+
+    // Now grab the index of the image that we retrieved. This will tell us
+    // which command buffer to use.
+    std::uint32_t imageIndex = result.value;
+
+    std::array<vk::Semaphore, 1> waitSemaphores{*mImageAvailableSemaphore};
+    std::array<vk::PipelineStageFlags, 1> waitStages{
+        vk::PipelineStageFlagBits::eColorAttachmentOutput};
+    std::array<vk::Semaphore, 1> signalSemaphores{*mRenderFinishedSemaphore};
+
+    // Now we need to submit the command buffer. The wait semaphores tell
+    // the command what to wait on, and the signal semaphores will be signalled
+    // once the command is done.
+    vk::SubmitInfo submitInfo{
+        static_cast<std::uint32_t>(waitSemaphores.size()),
+        waitSemaphores.data(),
+        waitStages.data(),
+        1,
+        &(*mCommandBuffers[imageIndex]),
+        static_cast<std::uint32_t>(signalSemaphores.size()),
+        signalSemaphores.data()};
+
+    // The array here is to make it more scalable when we're submitting multiple
+    // things, and the fence that can be passed in is for signalling when all
+    // submitted command buffers finish execution.
+    mGraphicsQueue.submit({submitInfo}, {});
+
+    std::array<vk::SwapchainKHR, 1> swapChains{*mSwapChain};
+
+    // The last step is to submit the resulting render back into the swap chain
+    // so that it can be shown on the screen.
+    vk::PresentInfoKHR presentInfo{
+        1,
+        signalSemaphores.data(),
+        static_cast<std::uint32_t>(swapChains.size()),
+        swapChains.data(),
+        &imageIndex,
+        nullptr};
+
+    mPresentQueue.presentKHR(presentInfo);
 }

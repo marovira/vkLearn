@@ -79,6 +79,12 @@ private:
 
     void createFramebuffers();
 
+    void createCommandPool();
+    void createCommandBuffers();
+
+    void createSemaphores();
+    void drawFrame();
+
     GLFWwindow* mWindow{nullptr};
 
     // This is the interface between our application and Vulkan.
@@ -161,4 +167,26 @@ private:
 
     // This will hold the actual framebuffers in the swap chain.
     std::vector<vk::UniqueFramebuffer> mSwapChainFramebuffers{};
+
+    // The command pools manage the memory that is used to store the buffers
+    // and command buffers are allocated on them. The command buffers are then
+    // executed and submitted to a device queue through the command pool. Note
+    // that a command pool can only allocate command buffers that are submitted
+    // on a single type of queue.
+    vk::UniqueCommandPool mCommandPool{};
+
+    // The command buffers have the commands that will be executed by the GPU.
+    // In rendering, the commands involve having the right framebuffer bound,
+    // so we need to have a list of command buffers for each framebuffer in
+    // our swap chain.
+    std::vector<vk::UniqueCommandBuffer> mCommandBuffers{};
+
+    // Vulkan's operations are asynchronous by nature. This means that any
+    // form of resource access needs to be coordinated. In our case,
+    // we need to coordinate when the image (framebuffer) is ready for
+    // rendering, and when the image is read for display so it can be
+    // transfered between the queues. We are going to do this with
+    // semaphores.
+    vk::UniqueSemaphore mImageAvailableSemaphore{};
+    vk::UniqueSemaphore mRenderFinishedSemaphore{};
 };
