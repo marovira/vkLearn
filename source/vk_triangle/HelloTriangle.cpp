@@ -19,6 +19,7 @@ namespace globals
 {
     static constexpr auto windowWidth{800};
     static constexpr auto windowHeight{600};
+    static constexpr auto maxFramesInFlight{2};
     static constexpr std::array<const char*, 1> validationLayers{
         "VK_LAYER_KHRONOS_validation"};
     static constexpr std::array<const char*, 1> deviceExtensions{
@@ -115,7 +116,7 @@ void HelloTriangleApplication::initVulkan()
     createFramebuffers();
     createCommandPool();
     createCommandBuffers();
-    createSemaphores();
+    createSyncObjects();
 }
 
 void HelloTriangleApplication::mainLoop()
@@ -1125,33 +1126,59 @@ void HelloTriangleApplication::createCommandBuffers()
     }
 }
 
-void HelloTriangleApplication::createSemaphores()
+void HelloTriangleApplication::createSyncObjects()
 {
+    mImageAvailableSemaphores.resize(globals::maxFramesInFlight);
+    mRenderFinishedSemaphores.resize(globals::maxFramesInFlight);
+    mInFlightFences.resize(globals::maxFramesInFlight);
+
     vk::SemaphoreCreateInfo semaphoreInfo{};
-    mImageAvailableSemaphore = mDevice->createSemaphoreUnique(semaphoreInfo);
-    mRenderFinishedSemaphore = mDevice->createSemaphoreUnique(semaphoreInfo);
+
+    // Fences are created in an unsignaled state. This means that any
+    // function waiting on this fence will be stuck waiting forever. To
+    // solve this, we must set the fence to be signaled.
+    vk::FenceCreateInfo fenceInfo{vk::FenceCreateFlagBits::eSignaled};
+
+    for (std::size_t i{0}; i < globals::maxFramesInFlight; ++i)
+    {
+        mImageAvailableSemaphores[i] =
+            mDevice->createSemaphoreUnique(semaphoreInfo);
+        mRenderFinishedSemaphores[i] =
+            mDevice->createSemaphoreUnique(semaphoreInfo);
+        mInFlightFences[i] = mDevice->createFenceUnique(fenceInfo);
+    }
 }
 
 void HelloTriangleApplication::drawFrame()
 {
+    // Before any action takes place, let's wait for the fences on the frames.
+    mDevice->waitForFences({*mInFlightFences[mCurrentFrame]}, VK_TRUE,
+                           std::numeric_limits<std::uint64_t>::max());
+
+    // Notice that, unlike semaphores, we need to reset the state of the fence
+    // so it can be used again.
+    mDevice->resetFences({*mInFlightFences[mCurrentFrame]});
+
     // First things first, we need to acquire an image from the swap chain. We
     // can specify a timeout if we wish, but for now we'll disable it, and we'll
     // use our semaphore to synchronize access with the images.
     auto result = mDevice->acquireNextImageKHR(
         *mSwapChain, std::numeric_limits<std::uint32_t>::max(),
-        *mImageAvailableSemaphore, {});
+        *mImageAvailableSemaphores[mCurrentFrame], {});
 
     // Now grab the index of the image that we retrieved. This will tell us
     // which command buffer to use.
     std::uint32_t imageIndex = result.value;
 
-    std::array<vk::Semaphore, 1> waitSemaphores{*mImageAvailableSemaphore};
+    std::array<vk::Semaphore, 1> waitSemaphores{
+        *mImageAvailableSemaphores[mCurrentFrame]};
     std::array<vk::PipelineStageFlags, 1> waitStages{
         vk::PipelineStageFlagBits::eColorAttachmentOutput};
-    std::array<vk::Semaphore, 1> signalSemaphores{*mRenderFinishedSemaphore};
+    std::array<vk::Semaphore, 1> signalSemaphores{
+        *mRenderFinishedSemaphores[mCurrentFrame]};
 
     // Now we need to submit the command buffer. The wait semaphores tell
-    // the command what to wait on, and the signal semaphores will be signalled
+    // the command what to wait on, and the signal semaphores will be signaled
     // once the command is done.
     vk::SubmitInfo submitInfo{
         static_cast<std::uint32_t>(waitSemaphores.size()),
@@ -1163,9 +1190,9 @@ void HelloTriangleApplication::drawFrame()
         signalSemaphores.data()};
 
     // The array here is to make it more scalable when we're submitting multiple
-    // things, and the fence that can be passed in is for signalling when all
+    // things, and the fence that can be passed in is for signaling when all
     // submitted command buffers finish execution.
-    mGraphicsQueue.submit({submitInfo}, {});
+    mGraphicsQueue.submit({submitInfo}, *mInFlightFences[mCurrentFrame]);
 
     std::array<vk::SwapchainKHR, 1> swapChains{*mSwapChain};
 
@@ -1180,4 +1207,6 @@ void HelloTriangleApplication::drawFrame()
         nullptr};
 
     mPresentQueue.presentKHR(presentInfo);
+
+    mCurrentFrame = (mCurrentFrame + 1) % globals::maxFramesInFlight;
 }

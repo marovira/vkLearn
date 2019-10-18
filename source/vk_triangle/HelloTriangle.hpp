@@ -82,7 +82,7 @@ private:
     void createCommandPool();
     void createCommandBuffers();
 
-    void createSemaphores();
+    void createSyncObjects();
     void drawFrame();
 
     GLFWwindow* mWindow{nullptr};
@@ -187,6 +187,15 @@ private:
     // rendering, and when the image is read for display so it can be
     // transfered between the queues. We are going to do this with
     // semaphores.
-    vk::UniqueSemaphore mImageAvailableSemaphore{};
-    vk::UniqueSemaphore mRenderFinishedSemaphore{};
+    std::vector<vk::UniqueSemaphore> mImageAvailableSemaphores{};
+    std::vector<vk::UniqueSemaphore> mRenderFinishedSemaphores{};
+
+    // Semaphores are used to coordinate the GPU-GPU interactions. Because
+    // we are allowing multiple frames in flight, we need to synchronize
+    // the CPU with the GPU to ensure that we don't submit any commands
+    // while frames are still processing. We are going to accomplish
+    // this with fences.
+    std::vector<vk::UniqueFence> mInFlightFences{};
+
+    std::size_t mCurrentFrame{0};
 };
