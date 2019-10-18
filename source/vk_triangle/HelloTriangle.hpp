@@ -77,6 +77,8 @@ private:
 
     void createRenderPass();
 
+    void createFramebuffers();
+
     GLFWwindow* mWindow{nullptr};
 
     // This is the interface between our application and Vulkan.
@@ -154,5 +156,9 @@ private:
     // pipeline.
     vk::UniquePipelineLayout mPipelineLayout{};
 
+    // Handle for the graphics pipeline.
     vk::UniquePipeline mGraphicsPipeline{};
+
+    // This will hold the actual framebuffers in the swap chain.
+    std::vector<vk::UniqueFramebuffer> mSwapChainFramebuffers{};
 };

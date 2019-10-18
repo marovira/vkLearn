@@ -112,6 +112,7 @@ void HelloTriangleApplication::initVulkan()
     createImageViews();
     createRenderPass();
     createGraphicsPipeline();
+    createFramebuffers();
 }
 
 void HelloTriangleApplication::mainLoop()
@@ -780,8 +781,7 @@ void HelloTriangleApplication::createImageViews()
                                            components,
                                            subresourceRange};
 
-        mSwapChainImageViews.emplace_back(
-            mDevice->createImageViewUnique(createInfo));
+        mSwapChainImageViews[i] = mDevice->createImageViewUnique(createInfo);
     }
 }
 
@@ -954,6 +954,8 @@ void HelloTriangleApplication::createGraphicsPipeline()
     mPipelineLayout =
         mDevice->createPipelineLayoutUnique(pipelineLayoutCreateInfo);
 
+    // Finally, we put everything together to create the graphics pipeline
+    // itself.
     vk::GraphicsPipelineCreateInfo pipelineInfo{
         {},
         static_cast<std::uint32_t>(shaderStages.size()),
@@ -1019,4 +1021,27 @@ void HelloTriangleApplication::createRenderPass()
         {}, 1, &colourAttachment, 1, &subpass};
 
     mRenderPass = mDevice->createRenderPassUnique(renderPassInfo);
+}
+
+void HelloTriangleApplication::createFramebuffers()
+{
+    mSwapChainFramebuffers.resize(mSwapChainImageViews.size());
+
+    // Iterate over each image view and create the framebuffers.
+    for (std::size_t i{0}; i < mSwapChainImageViews.size(); ++i)
+    {
+        std::array<vk::ImageView, 1> attachments{*mSwapChainImageViews[i]};
+
+        vk::FramebufferCreateInfo framebufferInfo{
+            {},
+            *mRenderPass,
+            static_cast<std::uint32_t>(attachments.size()),
+            attachments.data(),
+            mSwapChainExtent.width,
+            mSwapChainExtent.height,
+            1};
+
+        mSwapChainFramebuffers[i] =
+            mDevice->createFramebufferUnique(framebufferInfo);
+    }
 }
