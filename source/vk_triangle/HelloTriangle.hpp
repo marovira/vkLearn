@@ -11,6 +11,7 @@ class HelloTriangleApplication
 {
 public:
     void run();
+    void framebuffeResized();
 
 private:
     void initVulkan();
@@ -84,6 +85,9 @@ private:
 
     void createSyncObjects();
     void drawFrame();
+
+    void recreateSwapChain();
+    void cleanupSwapChain();
 
     GLFWwindow* mWindow{nullptr};
 
@@ -198,4 +202,5 @@ private:
     std::vector<vk::UniqueFence> mInFlightFences{};
 
     std::size_t mCurrentFrame{0};
+    bool mFramebufferResized{false};
 };

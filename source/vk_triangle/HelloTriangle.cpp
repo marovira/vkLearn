@@ -94,12 +94,25 @@ static std::vector<char> readFile(std::string const& filename)
     return buffer;
 }
 
+static void onFramebufferResize(GLFWwindow* window, [[maybe_unused]] int width,
+                                [[maybe_unused]] int height)
+{
+    auto app = reinterpret_cast<HelloTriangleApplication*>(
+        glfwGetWindowUserPointer(window));
+    app->framebuffeResized();
+}
+
 void HelloTriangleApplication::run()
 {
     initWindow();
     initVulkan();
     mainLoop();
     cleanup();
+}
+
+void HelloTriangleApplication::framebuffeResized()
+{
+    mFramebufferResized = true;
 }
 
 void HelloTriangleApplication::initVulkan()
@@ -141,9 +154,11 @@ void HelloTriangleApplication::initWindow()
     glfwInit();
 
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-    glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
     mWindow = glfwCreateWindow(globals::windowWidth, globals::windowHeight,
                                "Vulkan", nullptr, nullptr);
+
+    glfwSetWindowUserPointer(mWindow, this);
+    glfwSetFramebufferSizeCallback(mWindow, onFramebufferResize);
 }
 
 void HelloTriangleApplication::createInstance()
@@ -620,8 +635,10 @@ vk::Extent2D HelloTriangleApplication::chooseSwapExtent(
     }
     else
     {
-        vk::Extent2D actualExtent = {globals::windowWidth,
-                                     globals::windowHeight};
+        int width, height;
+        glfwGetFramebufferSize(mWindow, &width, &height);
+        vk::Extent2D actualExtent = {static_cast<std::uint32_t>(width),
+                                     static_cast<std::uint32_t>(height)};
 
         actualExtent.width = std::max(
             capabilities.minImageExtent.width,
@@ -1155,16 +1172,23 @@ void HelloTriangleApplication::drawFrame()
     mDevice->waitForFences({*mInFlightFences[mCurrentFrame]}, VK_TRUE,
                            std::numeric_limits<std::uint64_t>::max());
 
-    // Notice that, unlike semaphores, we need to reset the state of the fence
-    // so it can be used again.
-    mDevice->resetFences({*mInFlightFences[mCurrentFrame]});
-
     // First things first, we need to acquire an image from the swap chain. We
     // can specify a timeout if we wish, but for now we'll disable it, and we'll
     // use our semaphore to synchronize access with the images.
     auto result = mDevice->acquireNextImageKHR(
         *mSwapChain, std::numeric_limits<std::uint32_t>::max(),
         *mImageAvailableSemaphores[mCurrentFrame], {});
+
+    if (result.result == vk::Result::eErrorOutOfDateKHR ||
+        result.result == vk::Result::eSuboptimalKHR || mFramebufferResized)
+    {
+        mFramebufferResized = false;
+        recreateSwapChain();
+    }
+    else if (result.result != vk::Result::eSuccess)
+    {
+        throw std::runtime_error{"error: unable to acquire swap chain image."};
+    }
 
     // Now grab the index of the image that we retrieved. This will tell us
     // which command buffer to use.
@@ -1189,6 +1213,10 @@ void HelloTriangleApplication::drawFrame()
         static_cast<std::uint32_t>(signalSemaphores.size()),
         signalSemaphores.data()};
 
+    // Notice that, unlike semaphores, we need to reset the state of the fence
+    // so it can be used again.
+    mDevice->resetFences({*mInFlightFences[mCurrentFrame]});
+
     // The array here is to make it more scalable when we're submitting multiple
     // things, and the fence that can be passed in is for signaling when all
     // submitted command buffers finish execution.
@@ -1209,4 +1237,62 @@ void HelloTriangleApplication::drawFrame()
     mPresentQueue.presentKHR(presentInfo);
 
     mCurrentFrame = (mCurrentFrame + 1) % globals::maxFramesInFlight;
+}
+
+void HelloTriangleApplication::recreateSwapChain()
+{
+    int width{0}, height{0};
+    while (width == 0 || height == 0)
+    {
+        glfwGetFramebufferSize(mWindow, &width, &height);
+        glfwWaitEvents();
+    }
+
+    mDevice->waitIdle();
+
+    cleanupSwapChain();
+
+    createSwapChain();
+    createImageViews();
+    createRenderPass();
+    createGraphicsPipeline();
+    createFramebuffers();
+    createCommandBuffers();
+}
+
+void HelloTriangleApplication::cleanupSwapChain()
+{
+    for (std::size_t i{0}; i < mSwapChainFramebuffers.size(); ++i)
+    {
+        mDevice->destroyFramebuffer(*mSwapChainFramebuffers[i]);
+        mSwapChainFramebuffers[i].release();
+    }
+    mSwapChainFramebuffers.clear();
+
+    std::vector<vk::CommandBuffer> tempBuffers;
+    for (std::size_t i{0}; i < mCommandBuffers.size(); ++i)
+    {
+        tempBuffers.push_back(*mCommandBuffers[i]);
+        mCommandBuffers[i].release();
+    }
+    mCommandBuffers.clear();
+
+    mDevice->freeCommandBuffers(*mCommandPool, tempBuffers);
+
+    mDevice->destroyPipeline(*mGraphicsPipeline);
+    mGraphicsPipeline.release();
+    mDevice->destroyPipelineLayout(*mPipelineLayout);
+    mPipelineLayout.release();
+    mDevice->destroyRenderPass(*mRenderPass);
+    mRenderPass.release();
+
+    for (std::size_t i{0}; i < mSwapChainImageViews.size(); ++i)
+    {
+        mDevice->destroyImageView(*mSwapChainImageViews[i]);
+        mSwapChainImageViews[i].release();
+    }
+    mSwapChainImageViews.clear();
+
+    mDevice->destroySwapchainKHR(*mSwapChain);
+    mSwapChain.release();
 }
