@@ -102,6 +102,13 @@ static void onFramebufferResize(GLFWwindow* window, [[maybe_unused]] int width,
     app->framebuffeResized();
 }
 
+static void onWindowRedraw(GLFWwindow* window)
+{
+    auto app = reinterpret_cast<HelloTriangleApplication*>(
+        glfwGetWindowUserPointer(window));
+    app->redrawWindow();
+}
+
 void HelloTriangleApplication::run()
 {
     initWindow();
@@ -113,6 +120,15 @@ void HelloTriangleApplication::run()
 void HelloTriangleApplication::framebuffeResized()
 {
     mFramebufferResized = true;
+}
+
+void HelloTriangleApplication::redrawWindow()
+{
+    if (mFramebufferResized)
+    {
+        drawFrame();
+        drawFrame();
+    }
 }
 
 void HelloTriangleApplication::initVulkan()
@@ -159,6 +175,7 @@ void HelloTriangleApplication::initWindow()
 
     glfwSetWindowUserPointer(mWindow, this);
     glfwSetFramebufferSizeCallback(mWindow, onFramebufferResize);
+    glfwSetWindowRefreshCallback(mWindow, onWindowRedraw);
 }
 
 void HelloTriangleApplication::createInstance()

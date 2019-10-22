@@ -12,6 +12,7 @@ class HelloTriangleApplication
 public:
     void run();
     void framebuffeResized();
+    void redrawWindow();
 
 private:
     void initVulkan();
