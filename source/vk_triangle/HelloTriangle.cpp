@@ -1179,11 +1179,33 @@ void HelloTriangleApplication::drawFrame()
         *mSwapChain, std::numeric_limits<std::uint32_t>::max(),
         *mImageAvailableSemaphores[mCurrentFrame], {});
 
+    // The return value of ErrorOutOfDateKHR is not guaranteed to be
+    // triggered by the platforms or the drivers. As a result, we need
+    // to provide our own flag to check when the swapchain becomes invalid.
     if (result.result == vk::Result::eErrorOutOfDateKHR ||
         result.result == vk::Result::eSuboptimalKHR || mFramebufferResized)
     {
+        // Because the return of acquireNextImageKHR is not guaranteed,
+        // we need an extra check. If the window is resized but the return is
+        // success, then the corresponding semaphore is signaled. Since we
+        // rebuild the swapchain and then return, the semaphore is still
+        // in its signaled state, which would then cause an error when we
+        // draw the next frame. The solution to the problem is to reset the
+        // semaphore if the window is resized and acquireNextImageKHR returned
+        // success. Note that this will not happen if the return is a failure,
+        // and so this code is not needed in those cases.
+        if (mFramebufferResized && result.result == vk::Result::eSuccess)
+        {
+            mImageAvailableSemaphores[mCurrentFrame].reset();
+
+            vk::SemaphoreCreateInfo semaphoreInfo{};
+            mImageAvailableSemaphores[mCurrentFrame] =
+                mDevice->createSemaphoreUnique(semaphoreInfo);
+        }
+
         mFramebufferResized = false;
         recreateSwapChain();
+        return;
     }
     else if (result.result != vk::Result::eSuccess)
     {
@@ -1235,7 +1257,6 @@ void HelloTriangleApplication::drawFrame()
         nullptr};
 
     mPresentQueue.presentKHR(presentInfo);
-
     mCurrentFrame = (mCurrentFrame + 1) % globals::maxFramesInFlight;
 }
 
