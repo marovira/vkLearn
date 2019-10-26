@@ -1,2 +1,3 @@
 source/vk_triangle/Paths.hpp
+source/vk_buffers/Paths.hpp
 *.spv
