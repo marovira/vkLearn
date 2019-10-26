@@ -318,6 +318,10 @@ std::vector<const char*> HelloTriangleApplication::getRequiredExtensions()
 
 void HelloTriangleApplication::setupDebugMessenger()
 {
+    if (!globals::enableValidationLayers)
+    {
+        return;
+    }
     // Because the debug messenger is an extension, Vulkan does not load the
     // function pointers by default. Instead, we have to manually load them
     // ourselves. In particular, we need to load the pointers for the creation
