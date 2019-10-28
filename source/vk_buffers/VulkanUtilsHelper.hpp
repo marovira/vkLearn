@@ -4,8 +4,22 @@
 #include <GLFW/glfw3.h>
 
 #include <functional>
+#include <glm/glm.hpp>
 #include <optional>
 #include <vulkan/vulkan.hpp>
+
+namespace vkutils
+{
+    struct Vertex
+    {
+        glm::vec2 pos;
+        glm::vec3 colour;
+
+        static vk::VertexInputBindingDescription getBindingDescription();
+        static std::array<vk::VertexInputAttributeDescription, 2>
+        getAttributeDescriptions();
+    };
+} // namespace vkutils
 
 namespace globals
 {
@@ -19,6 +33,11 @@ namespace globals
         "VK_LAYER_KHRONOS_validation"};
     static const std::vector<const char*> deviceExtensions{
         VK_KHR_SWAPCHAIN_EXTENSION_NAME};
+
+    std::vector<vkutils::Vertex> const vertices{
+        {{0.0f, -0.5f}, {1.0f, 0.0f, 0.0f}},
+        {{0.5f, 0.5f}, {0.0f, 1.0f, 0.0f}},
+        {{-0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}}};
 } // namespace globals
 
 static VKAPI_ATTR vk::Bool32 VKAPI_CALL debugCallback(
@@ -50,6 +69,12 @@ namespace vkutils
     {
         vk::PipelineLayout layout;
         vk::Pipeline pipeline;
+    };
+
+    struct VertexBuffer
+    {
+        vk::Buffer buffer;
+        vk::DeviceMemory bufferMemory;
     };
 
     template<typename T>
@@ -123,6 +148,12 @@ namespace vkutils
                        vk::RenderPass const& renderPass,
                        vk::Extent2D const& extent);
 
+    VertexBuffer createVertexBuffer(vk::Device const& device,
+                                    vk::PhysicalDevice const& physicalDevice);
+    std::uint32_t findMemoryType(std::uint32_t typeFilter,
+                                 vk::MemoryPropertyFlags const& properties,
+                                 vk::PhysicalDevice const& physicalDevice);
+
     vk::UniqueCommandPool
     createCommandPool(vk::Device const& device,
                       vk::PhysicalDevice const& physicalDevice,
@@ -132,6 +163,7 @@ namespace vkutils
         vk::Device const& device,
         std::vector<vk::UniqueFramebuffer> const& framebuffers,
         vk::CommandPool const& commandPool, vk::RenderPass const& renderPass,
-        vk::Extent2D const& extent, vk::Pipeline const& pipeline);
+        vk::Extent2D const& extent, vk::Pipeline const& pipeline,
+        vk::Buffer const& buffer);
 
 } // namespace vkutils

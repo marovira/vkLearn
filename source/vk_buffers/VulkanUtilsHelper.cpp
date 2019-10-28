@@ -54,6 +54,33 @@ debugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
 
 namespace vkutils
 {
+    vk::VertexInputBindingDescription Vertex::getBindingDescription()
+    {
+        vk::VertexInputBindingDescription bindingDescription;
+        bindingDescription.binding   = 0;
+        bindingDescription.stride    = sizeof(Vertex);
+        bindingDescription.inputRate = vk::VertexInputRate::eVertex;
+        return bindingDescription;
+    }
+
+    std::array<vk::VertexInputAttributeDescription, 2>
+    Vertex::getAttributeDescriptions()
+    {
+        std::array<vk::VertexInputAttributeDescription, 2>
+            attributeDescriptions;
+        attributeDescriptions[0].binding  = 0;
+        attributeDescriptions[0].location = 0;
+        attributeDescriptions[0].format   = vk::Format::eR32G32Sfloat;
+        attributeDescriptions[0].offset   = offsetof(Vertex, pos);
+
+        attributeDescriptions[1].binding  = 0;
+        attributeDescriptions[1].location = 1;
+        attributeDescriptions[1].format   = vk::Format::eR32G32B32Sfloat;
+        attributeDescriptions[1].offset   = offsetof(Vertex, colour);
+
+        return attributeDescriptions;
+    }
+
     bool compareLayers(std::string_view const& layerName,
                        vk::LayerProperties const& layer)
     {
@@ -446,7 +473,16 @@ namespace vkutils
         std::array<vk::PipelineShaderStageCreateInfo, 2> shaderStages{
             vertShaderInfo, fragShaderInfo};
 
+        auto bindingDescription    = Vertex::getBindingDescription();
+        auto attributeDescriptions = Vertex::getAttributeDescriptions();
+
         vk::PipelineVertexInputStateCreateInfo vertexInputInfo;
+        vertexInputInfo.vertexBindingDescriptionCount = 1;
+        vertexInputInfo.pVertexBindingDescriptions    = &bindingDescription;
+        vertexInputInfo.vertexAttributeDescriptionCount =
+            static_cast<std::uint32_t>(attributeDescriptions.size());
+        vertexInputInfo.pVertexAttributeDescriptions =
+            attributeDescriptions.data();
 
         vk::PipelineInputAssemblyStateCreateInfo inputAssembly;
         inputAssembly.topology = vk::PrimitiveTopology::eTriangleList;
@@ -572,6 +608,55 @@ namespace vkutils
         return framebuffers;
     }
 
+    VertexBuffer createVertexBuffer(vk::Device const& device,
+                                    vk::PhysicalDevice const& physicalDevice)
+    {
+        VertexBuffer vbo;
+        vk::BufferCreateInfo bufferInfo;
+        bufferInfo.size =
+            sizeof(globals::vertices[0]) * globals::vertices.size();
+        bufferInfo.usage       = vk::BufferUsageFlagBits::eVertexBuffer;
+        bufferInfo.sharingMode = vk::SharingMode::eExclusive;
+
+        vbo.buffer = device.createBuffer(bufferInfo);
+
+        auto memRequirements = device.getBufferMemoryRequirements(vbo.buffer);
+        vk::MemoryAllocateInfo allocInfo;
+        allocInfo.allocationSize = memRequirements.size;
+        allocInfo.memoryTypeIndex =
+            findMemoryType(memRequirements.memoryTypeBits,
+                           vk::MemoryPropertyFlagBits::eHostVisible |
+                               vk::MemoryPropertyFlagBits::eHostCoherent,
+                           physicalDevice);
+        vbo.bufferMemory = device.allocateMemory(allocInfo);
+        device.bindBufferMemory(vbo.buffer, vbo.bufferMemory, 0);
+
+        void* data = device.mapMemory(vbo.bufferMemory, 0, bufferInfo.size);
+        std::memcpy(data, globals::vertices.data(),
+                    static_cast<std::size_t>(bufferInfo.size));
+        device.unmapMemory(vbo.bufferMemory);
+
+        return vbo;
+    }
+
+    std::uint32_t findMemoryType(std::uint32_t typeFilter,
+                                 vk::MemoryPropertyFlags const& properties,
+                                 vk::PhysicalDevice const& physicalDevice)
+    {
+        auto memProperties = physicalDevice.getMemoryProperties();
+        for (std::uint32_t i{0}; i < memProperties.memoryTypeCount; ++i)
+        {
+            if (typeFilter & (1 << i) &&
+                (memProperties.memoryTypes[i].propertyFlags & properties) ==
+                    properties)
+            {
+                return i;
+            }
+        }
+
+        throw std::runtime_error{"error: failed to find suitable memory type."};
+    }
+
     vk::UniqueCommandPool
     createCommandPool(vk::Device const& device,
                       vk::PhysicalDevice const& physicalDevice,
@@ -583,11 +668,13 @@ namespace vkutils
         return device.createCommandPoolUnique(createInfo);
     }
 
-    std::vector<vk::UniqueCommandBuffer> createCommandBuffers(
-        vk::Device const& device,
-        std::vector<vk::UniqueFramebuffer> const& framebuffers,
-        vk::CommandPool const& commandPool, vk::RenderPass const& renderPass,
-        vk::Extent2D const& extent, vk::Pipeline const& pipeline)
+    std::vector<vk::UniqueCommandBuffer>
+    createCommandBuffers(vk::Device const& device,
+                         std::vector<vk::UniqueFramebuffer> const& framebuffers,
+                         vk::CommandPool const& commandPool,
+                         vk::RenderPass const& renderPass,
+                         vk::Extent2D const& extent,
+                         vk::Pipeline const& pipeline, vk::Buffer const& buffer)
     {
         std::vector<vk::UniqueCommandBuffer> commandBuffers(
             framebuffers.size());
@@ -619,7 +706,13 @@ namespace vkutils
                                                vk::SubpassContents::eInline);
             commandBuffers[i]->bindPipeline(vk::PipelineBindPoint::eGraphics,
                                             pipeline);
-            commandBuffers[i]->draw(3, 1, 0, 0);
+
+            std::array<vk::Buffer, 1> vertexBuffers = {buffer};
+            std::array<vk::DeviceSize, 1> offsets{0};
+
+            commandBuffers[i]->bindVertexBuffers(0, vertexBuffers, offsets);
+            commandBuffers[i]->draw(
+                static_cast<std::uint32_t>(globals::vertices.size()), 1, 0, 0);
             commandBuffers[i]->endRenderPass();
             commandBuffers[i]->end();
         }

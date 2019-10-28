@@ -183,9 +183,13 @@ namespace vkutils
         s.framebuffers =
             createFramebuffers(device, s.imageViews, *s.renderPass, s.extent);
         s.commandPool = createCommandPool(device, physicalDevice, surface);
-        s.commandBuffers =
-            createCommandBuffers(device, s.framebuffers, *s.commandPool,
-                                 *s.renderPass, s.extent, *s.graphicsPipeline);
+
+        VertexBuffer vbo     = createVertexBuffer(device, physicalDevice);
+        s.vertexBuffer       = vk::UniqueBuffer(vbo.buffer, device);
+        s.vertexBufferMemory = vk::UniqueDeviceMemory(vbo.bufferMemory, device);
+        s.commandBuffers     = createCommandBuffers(
+            device, s.framebuffers, *s.commandPool, *s.renderPass, s.extent,
+            *s.graphicsPipeline, vbo.buffer);
 
         return s;
     }
@@ -241,9 +245,9 @@ namespace vkutils
         s.graphicsPipeline = vk::UniquePipeline(p.pipeline, device);
         s.framebuffers =
             createFramebuffers(device, s.imageViews, *s.renderPass, s.extent);
-        s.commandBuffers =
-            createCommandBuffers(device, s.framebuffers, *s.commandPool,
-                                 *s.renderPass, s.extent, *s.graphicsPipeline);
+        s.commandBuffers = createCommandBuffers(
+            device, s.framebuffers, *s.commandPool, *s.renderPass, s.extent,
+            *s.graphicsPipeline, *s.vertexBuffer);
     }
 
     void cleanupSwapchain(Swapchain& s, vk::Device const& device)

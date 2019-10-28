@@ -26,6 +26,8 @@ namespace vkutils
         vk::UniquePipeline graphicsPipeline;
         std::vector<vk::UniqueFramebuffer> framebuffers;
         vk::UniqueCommandPool commandPool;
+        vk::UniqueBuffer vertexBuffer;
+        vk::UniqueDeviceMemory vertexBufferMemory;
         std::vector<vk::UniqueCommandBuffer> commandBuffers;
     };
 
