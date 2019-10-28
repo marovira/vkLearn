@@ -72,7 +72,7 @@ namespace vkutils
     vk::DebugUtilsMessengerEXT
     createDebugMessenger(vk::Instance const& instance)
     {
-        if constexpr (globals::isDebugBuild)
+        if (globals::isDebugBuild)
         {
             loadDebugFunctions(instance);
             return instance.createDebugUtilsMessengerEXT(
