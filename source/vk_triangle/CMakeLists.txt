@@ -13,7 +13,8 @@ set(PATH_INCLUDE "${EXAMPLE_ROOT}/Paths.hpp")
 configure_file("${EXAMPLE_ROOT}/Paths.hpp.in" ${PATH_INCLUDE})
 list(APPEND INCLUDE_LIST ${PATH_INCLUDE})
 
-source_group("source" FILES ${SOURCE_LIST} ${INCLUDE_LIST})
+source_group("source" FILES ${SOURCE_LIST})
+source_group("include" FILES ${INCLUDE_LIST})
 
 add_executable(${EXEC_NAME} ${SOURCE_LIST} ${INCLUDE_LIST})
 target_compile_features(${EXEC_NAME} PUBLIC cxx_std_17)
