@@ -3,10 +3,10 @@ set(EXAMPLE_ROOT "${CMAKE_CURRENT_LIST_DIR}")
 
 set(SOURCE_LIST
     "${EXAMPLE_ROOT}/main.cpp"
-    "${EXAMPLE_ROOT}/HelloTriangle.cpp"
+    "${EXAMPLE_ROOT}/Application.cpp"
     )
 set(INCLUDE_LIST
-    "${EXAMPLE_ROOT}/HelloTriangle.hpp"
+    "${EXAMPLE_ROOT}/Application.hpp"
     )
 
 set(PATH_INCLUDE "${EXAMPLE_ROOT}/Paths.hpp")
