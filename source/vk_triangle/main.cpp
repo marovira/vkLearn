@@ -1,11 +1,11 @@
-#include "HelloTriangle.hpp"
+#include "Application.hpp"
 
 #include <fmt/printf.h>
 #include <stdexcept>
 
 int main()
 {
-    HelloTriangleApplication app;
+    Application app;
     try
     {
         app.run();

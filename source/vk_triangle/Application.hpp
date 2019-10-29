@@ -7,7 +7,7 @@
 
 #include <optional>
 
-class HelloTriangleApplication
+class Application
 {
 public:
     void run();

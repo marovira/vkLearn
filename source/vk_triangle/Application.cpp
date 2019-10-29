@@ -1,4 +1,4 @@
-#include "HelloTriangle.hpp"
+#include "Application.hpp"
 #include "Paths.hpp"
 
 #include <algorithm>
@@ -97,19 +97,17 @@ static std::vector<char> readFile(std::string const& filename)
 static void onFramebufferResize(GLFWwindow* window, [[maybe_unused]] int width,
                                 [[maybe_unused]] int height)
 {
-    auto app = reinterpret_cast<HelloTriangleApplication*>(
-        glfwGetWindowUserPointer(window));
+    auto app = reinterpret_cast<Application*>(glfwGetWindowUserPointer(window));
     app->framebuffeResized();
 }
 
 static void onWindowRedraw(GLFWwindow* window)
 {
-    auto app = reinterpret_cast<HelloTriangleApplication*>(
-        glfwGetWindowUserPointer(window));
+    auto app = reinterpret_cast<Application*>(glfwGetWindowUserPointer(window));
     app->redrawWindow();
 }
 
-void HelloTriangleApplication::run()
+void Application::run()
 {
     initWindow();
     initVulkan();
@@ -117,12 +115,12 @@ void HelloTriangleApplication::run()
     cleanup();
 }
 
-void HelloTriangleApplication::framebuffeResized()
+void Application::framebuffeResized()
 {
     mFramebufferResized = true;
 }
 
-void HelloTriangleApplication::redrawWindow()
+void Application::redrawWindow()
 {
     if (mFramebufferResized)
     {
@@ -131,7 +129,7 @@ void HelloTriangleApplication::redrawWindow()
     }
 }
 
-void HelloTriangleApplication::initVulkan()
+void Application::initVulkan()
 {
     createInstance();
     setupDebugMessenger();
@@ -148,7 +146,7 @@ void HelloTriangleApplication::initVulkan()
     createSyncObjects();
 }
 
-void HelloTriangleApplication::mainLoop()
+void Application::mainLoop()
 {
     while (!glfwWindowShouldClose(mWindow))
     {
@@ -159,13 +157,13 @@ void HelloTriangleApplication::mainLoop()
     mDevice->waitIdle();
 }
 
-void HelloTriangleApplication::cleanup()
+void Application::cleanup()
 {
     glfwDestroyWindow(mWindow);
     glfwTerminate();
 }
 
-void HelloTriangleApplication::initWindow()
+void Application::initWindow()
 {
     glfwInit();
 
@@ -178,7 +176,7 @@ void HelloTriangleApplication::initWindow()
     glfwSetWindowRefreshCallback(mWindow, onWindowRedraw);
 }
 
-void HelloTriangleApplication::createInstance()
+void Application::createInstance()
 {
     // Struct holding the data from our application. This can be mostly left as
     // is (with the sole exception of perhaps updating the API version as we go
@@ -238,7 +236,7 @@ void HelloTriangleApplication::createInstance()
     mInstance = vk::createInstanceUnique(createInfo);
 }
 
-void HelloTriangleApplication::listExtensions()
+void Application::listExtensions()
 {
     // This retrieves the list of extensions that are available. Notice that
     // since we left the argument list empty, it will simply retrieve all
@@ -254,7 +252,7 @@ void HelloTriangleApplication::listExtensions()
     }
 }
 
-bool HelloTriangleApplication::checkExtensions(
+bool Application::checkExtensions(
     std::vector<char const*> const& layers,
     std::vector<vk::ExtensionProperties> const& properties)
 {
@@ -271,7 +269,7 @@ bool HelloTriangleApplication::checkExtensions(
     });
 }
 
-bool HelloTriangleApplication::checkLayers(
+bool Application::checkLayers(
     std::vector<char const*> const& layers,
     std::vector<vk::LayerProperties> const& properties)
 {
@@ -288,7 +286,7 @@ bool HelloTriangleApplication::checkLayers(
     });
 }
 
-std::vector<const char*> HelloTriangleApplication::getRequiredExtensions()
+std::vector<const char*> Application::getRequiredExtensions()
 {
     // Because Vulkan is a platform agnostic API, we need an extension to
     // interface with the OS window system. We can handle this easily with GLFW,
@@ -316,7 +314,7 @@ std::vector<const char*> HelloTriangleApplication::getRequiredExtensions()
     return extensions;
 }
 
-void HelloTriangleApplication::setupDebugMessenger()
+void Application::setupDebugMessenger()
 {
     if (!globals::enableValidationLayers)
     {
@@ -349,8 +347,7 @@ void HelloTriangleApplication::setupDebugMessenger()
         getDebugMessengerCreateInfo());
 }
 
-vk::DebugUtilsMessengerCreateInfoEXT
-HelloTriangleApplication::getDebugMessengerCreateInfo()
+vk::DebugUtilsMessengerCreateInfoEXT Application::getDebugMessengerCreateInfo()
 {
     // These two setup the types of messages that we want to receive from
     // Vulkan. To keep things simple, pretty much everything is enabled.
@@ -378,7 +375,7 @@ HelloTriangleApplication::getDebugMessengerCreateInfo()
     return createInfo;
 }
 
-void HelloTriangleApplication::pickPhysicalDevice()
+void Application::pickPhysicalDevice()
 {
     std::vector<vk::PhysicalDevice> devices =
         mInstance->enumeratePhysicalDevices();
@@ -404,8 +401,7 @@ void HelloTriangleApplication::pickPhysicalDevice()
     }
 }
 
-bool HelloTriangleApplication::isDeviceSuitable(
-    vk::PhysicalDevice const& device)
+bool Application::isDeviceSuitable(vk::PhysicalDevice const& device)
 {
     // A few notes on this function:
     // Currently it is setup to be really simple and to only accept either
@@ -440,8 +436,8 @@ bool HelloTriangleApplication::isDeviceSuitable(
            isSwapChainAdequate;
 }
 
-HelloTriangleApplication::QueueFamilyIndices
-HelloTriangleApplication::findQueueFamilies(vk::PhysicalDevice const& device)
+Application::QueueFamilyIndices
+Application::findQueueFamilies(vk::PhysicalDevice const& device)
 {
     QueueFamilyIndices indices;
 
@@ -468,7 +464,7 @@ HelloTriangleApplication::findQueueFamilies(vk::PhysicalDevice const& device)
     return indices;
 }
 
-void HelloTriangleApplication::createLogicalDevice()
+void Application::createLogicalDevice()
 {
     auto indices = findQueueFamilies(mPhysicalDevice);
 
@@ -541,7 +537,7 @@ void HelloTriangleApplication::createLogicalDevice()
     mPresentQueue  = mDevice->getQueue(*indices.presentFamily, 0);
 }
 
-void HelloTriangleApplication::createSurface()
+void Application::createSurface()
 {
     VkSurfaceKHR surface = static_cast<VkSurfaceKHR>(*mSurface);
     if (glfwCreateWindowSurface(*mInstance, mWindow, nullptr, &surface))
@@ -561,8 +557,7 @@ void HelloTriangleApplication::createSurface()
     mSurface = vk::UniqueSurfaceKHR{surface, *mInstance};
 }
 
-bool HelloTriangleApplication::checkDeviceExtensionSupport(
-    vk::PhysicalDevice const& device)
+bool Application::checkDeviceExtensionSupport(vk::PhysicalDevice const& device)
 {
     // Similarly to how we checked whether the global instance had support for
     // the extensions we required, we also need to check if the device has
@@ -582,9 +577,8 @@ bool HelloTriangleApplication::checkDeviceExtensionSupport(
     return requiredExtensions.empty();
 }
 
-HelloTriangleApplication::SwapChainSupportDetails
-HelloTriangleApplication::querySwapChainSupport(
-    vk::PhysicalDevice const& device)
+Application::SwapChainSupportDetails
+Application::querySwapChainSupport(vk::PhysicalDevice const& device)
 {
     SwapChainSupportDetails details;
     details.capabilities = device.getSurfaceCapabilitiesKHR(*mSurface);
@@ -594,7 +588,7 @@ HelloTriangleApplication::querySwapChainSupport(
     return details;
 }
 
-vk::SurfaceFormatKHR HelloTriangleApplication::chooseSwapSurfaceFormat(
+vk::SurfaceFormatKHR Application::chooseSwapSurfaceFormat(
     std::vector<vk::SurfaceFormatKHR> const& availableFormats)
 {
     // For this particular example, we are going to be needing a swap chain that
@@ -614,7 +608,7 @@ vk::SurfaceFormatKHR HelloTriangleApplication::chooseSwapSurfaceFormat(
     return availableFormats[0];
 }
 
-vk::PresentModeKHR HelloTriangleApplication::chooseSwapPresentMode(
+vk::PresentModeKHR Application::chooseSwapPresentMode(
     std::vector<vk::PresentModeKHR> const& availablePresentModes)
 {
     // Here we set under which conditions we swap our images and showing them to
@@ -642,8 +636,8 @@ vk::PresentModeKHR HelloTriangleApplication::chooseSwapPresentMode(
     return vk::PresentModeKHR::eFifo;
 }
 
-vk::Extent2D HelloTriangleApplication::chooseSwapExtent(
-    vk::SurfaceCapabilitiesKHR const& capabilities)
+vk::Extent2D
+Application::chooseSwapExtent(vk::SurfaceCapabilitiesKHR const& capabilities)
 {
     // The swap extent is the resolution of the images in the swap chain and is
     // almost always the same size as the window we are rendering to. Keep in
@@ -672,7 +666,7 @@ vk::Extent2D HelloTriangleApplication::chooseSwapExtent(
     }
 }
 
-void HelloTriangleApplication::createSwapChain()
+void Application::createSwapChain()
 {
     // Vulkan does not support a framebuffer by default. Instead what we have
     // to do is create the default framebuffer, and all the setup it requires.
@@ -791,7 +785,7 @@ void HelloTriangleApplication::createSwapChain()
     mSwapChainExtent      = extent;
 }
 
-void HelloTriangleApplication::createImageViews()
+void Application::createImageViews()
 {
     mSwapChainImageViews.resize(mSwapChainImages.size());
 
@@ -830,7 +824,7 @@ void HelloTriangleApplication::createImageViews()
     }
 }
 
-void HelloTriangleApplication::createGraphicsPipeline()
+void Application::createGraphicsPipeline()
 {
     std::string root{ShaderPath};
     auto vertexShaderCode   = readFile(root + "triangle.vert.spv");
@@ -1024,7 +1018,7 @@ void HelloTriangleApplication::createGraphicsPipeline()
 }
 
 vk::UniqueShaderModule
-HelloTriangleApplication::createShaderModule(std::vector<char> const& code)
+Application::createShaderModule(std::vector<char> const& code)
 {
     // The shader module is basically a wrapper around the shader code itself.
     // In this it is very similar to the shaders from OpenGL. The parameters
@@ -1043,7 +1037,7 @@ HelloTriangleApplication::createShaderModule(std::vector<char> const& code)
     return shaderModule;
 }
 
-void HelloTriangleApplication::createRenderPass()
+void Application::createRenderPass()
 {
     vk::AttachmentDescription colourAttachment{{},
                                                mSwapChainImageFormat,
@@ -1077,7 +1071,7 @@ void HelloTriangleApplication::createRenderPass()
     mRenderPass = mDevice->createRenderPassUnique(renderPassInfo);
 }
 
-void HelloTriangleApplication::createFramebuffers()
+void Application::createFramebuffers()
 {
     mSwapChainFramebuffers.resize(mSwapChainImageViews.size());
 
@@ -1100,7 +1094,7 @@ void HelloTriangleApplication::createFramebuffers()
     }
 }
 
-void HelloTriangleApplication::createCommandPool()
+void Application::createCommandPool()
 {
     QueueFamilyIndices queueFamilyIndices = findQueueFamilies(mPhysicalDevice);
 
@@ -1108,7 +1102,7 @@ void HelloTriangleApplication::createCommandPool()
     mCommandPool = mDevice->createCommandPoolUnique(poolInfo);
 }
 
-void HelloTriangleApplication::createCommandBuffers()
+void Application::createCommandBuffers()
 {
     mCommandBuffers.resize(mSwapChainFramebuffers.size());
 
@@ -1164,7 +1158,7 @@ void HelloTriangleApplication::createCommandBuffers()
     }
 }
 
-void HelloTriangleApplication::createSyncObjects()
+void Application::createSyncObjects()
 {
     mImageAvailableSemaphores.resize(globals::maxFramesInFlight);
     mRenderFinishedSemaphores.resize(globals::maxFramesInFlight);
@@ -1187,7 +1181,7 @@ void HelloTriangleApplication::createSyncObjects()
     }
 }
 
-void HelloTriangleApplication::drawFrame()
+void Application::drawFrame()
 {
     // Before any action takes place, let's wait for the fences on the frames.
     mDevice->waitForFences({*mInFlightFences[mCurrentFrame]}, VK_TRUE,
@@ -1281,7 +1275,7 @@ void HelloTriangleApplication::drawFrame()
     mCurrentFrame = (mCurrentFrame + 1) % globals::maxFramesInFlight;
 }
 
-void HelloTriangleApplication::recreateSwapChain()
+void Application::recreateSwapChain()
 {
     int width{0}, height{0};
     while (width == 0 || height == 0)
@@ -1302,7 +1296,7 @@ void HelloTriangleApplication::recreateSwapChain()
     createCommandBuffers();
 }
 
-void HelloTriangleApplication::cleanupSwapChain()
+void Application::cleanupSwapChain()
 {
     for (std::size_t i{0}; i < mSwapChainFramebuffers.size(); ++i)
     {
