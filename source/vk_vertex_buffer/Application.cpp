@@ -29,6 +29,13 @@ namespace globals
     // loaded automatically by Vulkan.
     PFN_vkCreateDebugUtilsMessengerEXT pfnVkCreateDebugUtilsMessengerEXT;
     PFN_vkDestroyDebugUtilsMessengerEXT pfnVkDestroyDebugUtilsMessengerEXT;
+
+    // clang-format off
+    const std::vector<Vertex> vertices{
+        {{ 0.0f, -0.5f},    {1.0f, 0.0f, 0.0f}},
+        {{ 0.5f,  0.5f},    {0.0f, 1.0f, 0.0f}},
+        {{-0.5f,  0.5f},    {0.0f, 0.0f, 1.0f}}};
+    // clang-format on
 } // namespace globals
 
 static VKAPI_ATTR vk::Bool32 VKAPI_CALL
@@ -119,6 +126,34 @@ bool compareExtensions(std::string_view const& extensionName,
     return name == extensionName;
 }
 
+vk::VertexInputBindingDescription Vertex::getBindingDescription()
+{
+    vk::VertexInputBindingDescription bindingDescription;
+    bindingDescription.binding   = 0;
+    bindingDescription.stride    = sizeof(Vertex);
+    bindingDescription.inputRate = vk::VertexInputRate::eVertex;
+
+    return bindingDescription;
+}
+
+std::array<vk::VertexInputAttributeDescription, 2>
+Vertex::getAttributeDescriptions()
+{
+    std::array<vk::VertexInputAttributeDescription, 2> attributeDescriptions;
+
+    attributeDescriptions[0].binding  = 0;
+    attributeDescriptions[0].location = 0;
+    attributeDescriptions[0].format   = vk::Format::eR32G32Sfloat;
+    attributeDescriptions[0].offset   = offsetof(Vertex, pos);
+
+    attributeDescriptions[1].binding  = 0;
+    attributeDescriptions[1].location = 1;
+    attributeDescriptions[1].format   = vk::Format::eR32G32B32Sfloat;
+    attributeDescriptions[1].offset   = offsetof(Vertex, pos);
+
+    return attributeDescriptions;
+}
+
 void Application::run()
 {
     initWindow();
@@ -154,6 +189,7 @@ void Application::initVulkan()
     createGraphicsPipeline();
     createFramebuffers();
     createCommandPool();
+    createVertexBuffer();
     createCommandBuffers();
     createSyncObjects();
 }
@@ -365,7 +401,7 @@ bool Application::isDeviceSuitable(vk::PhysicalDevice const& device)
            isSwapChainAdequate;
 }
 
-Application::QueueFamilyIndices
+QueueFamilyIndices
 Application::findQueueFamilies(vk::PhysicalDevice const& device)
 {
     QueueFamilyIndices indices;
@@ -453,7 +489,7 @@ bool Application::checkDeviceExtensionSupport(vk::PhysicalDevice const& device)
         compareExtensions);
 }
 
-Application::SwapChainSupportDetails
+SwapChainSupportDetails
 Application::querySwapChainSupport(vk::PhysicalDevice const& device)
 {
     SwapChainSupportDetails details;
@@ -630,11 +666,15 @@ void Application::createGraphicsPipeline()
     std::array<vk::PipelineShaderStageCreateInfo, 2> shaderStages{
         vertShaderInfo, fragShaderInfo};
 
+    auto bindingDescription    = Vertex::getBindingDescription();
+    auto attributeDescriptions = Vertex::getAttributeDescriptions();
+
     vk::PipelineVertexInputStateCreateInfo vertexInputInfo;
-    vertexInputInfo.vertexBindingDescriptionCount   = 0;
-    vertexInputInfo.pVertexBindingDescriptions      = nullptr;
-    vertexInputInfo.vertexAttributeDescriptionCount = 0;
-    vertexInputInfo.pVertexAttributeDescriptions    = nullptr;
+    vertexInputInfo.vertexBindingDescriptionCount = 1;
+    vertexInputInfo.pVertexBindingDescriptions    = &bindingDescription;
+    vertexInputInfo.vertexAttributeDescriptionCount =
+        static_cast<std::uint32_t>(attributeDescriptions.size());
+    vertexInputInfo.pVertexAttributeDescriptions = attributeDescriptions.data();
 
     vk::PipelineInputAssemblyStateCreateInfo inputAssembly;
     inputAssembly.topology               = vk::PrimitiveTopology::eTriangleList;
@@ -835,7 +875,12 @@ void Application::createCommandBuffers()
 
         mCommandBuffers[i]->bindPipeline(vk::PipelineBindPoint::eGraphics,
                                          *mGraphicsPipeline);
-        mCommandBuffers[i]->draw(3, 1, 0, 0);
+        std::array<vk::Buffer, 1> vertexBuffers{*mVertexBuffer};
+        std::array<vk::DeviceSize, 1> offsets{0};
+
+        mCommandBuffers[i]->bindVertexBuffers(0, vertexBuffers, offsets);
+        mCommandBuffers[i]->draw(
+            static_cast<std::uint32_t>(globals::vertices.size()), 1, 0, 0);
         mCommandBuffers[i]->endRenderPass();
         mCommandBuffers[i]->end();
     }
@@ -986,4 +1031,50 @@ void Application::cleanupSwapChain()
 
     mDevice->destroySwapchainKHR(*mSwapchain);
     mSwapchain.release();
+}
+
+void Application::createVertexBuffer()
+{
+    vk::BufferCreateInfo bufferInfo;
+    bufferInfo.size  = sizeof(globals::vertices[0]) * globals::vertices.size();
+    bufferInfo.usage = vk::BufferUsageFlagBits::eVertexBuffer;
+    bufferInfo.sharingMode = vk::SharingMode::eExclusive;
+
+    mVertexBuffer = mDevice->createBufferUnique(bufferInfo);
+
+    auto memRequirements = mDevice->getBufferMemoryRequirements(*mVertexBuffer);
+
+    vk::MemoryAllocateInfo allocInfo;
+    allocInfo.allocationSize = memRequirements.size;
+    allocInfo.memoryTypeIndex =
+        findMemoryType(memRequirements.memoryTypeBits,
+                       vk::MemoryPropertyFlagBits::eHostVisible |
+                           vk::MemoryPropertyFlagBits::eHostCoherent);
+
+    mVertexBufferMemory = mDevice->allocateMemoryUnique(allocInfo);
+    mDevice->bindBufferMemory(*mVertexBuffer, *mVertexBufferMemory, 0);
+
+    void* data;
+    mDevice->mapMemory(*mVertexBufferMemory, 0, bufferInfo.size, {}, &data);
+    memcpy(data, globals::vertices.data(),
+           static_cast<std::size_t>(bufferInfo.size));
+    mDevice->unmapMemory(*mVertexBufferMemory);
+}
+
+std::uint32_t
+Application::findMemoryType(std::uint32_t typeFilter,
+                            vk::MemoryPropertyFlags const& properties)
+{
+    auto memProperties = mPhysicalDevice.getMemoryProperties();
+    for (std::uint32_t i{0}; i < memProperties.memoryTypeCount; ++i)
+    {
+        if (typeFilter & (1 << i) &&
+            (memProperties.memoryTypes[i].propertyFlags & properties) ==
+                properties)
+        {
+            return i;
+        }
+    }
+
+    throw std::runtime_error{"error: failed to find suitable memory type."};
 }

@@ -7,7 +7,36 @@
 
 #include <algorithm>
 #include <functional>
+#include <glm/glm.hpp>
 #include <optional>
+
+struct QueueFamilyIndices
+{
+    std::optional<std::uint32_t> graphicsFamily;
+    std::optional<std::uint32_t> presentFamily;
+
+    bool isComplete() const
+    {
+        return graphicsFamily.has_value() && presentFamily.has_value();
+    }
+};
+
+struct SwapChainSupportDetails
+{
+    vk::SurfaceCapabilitiesKHR capabilities;
+    std::vector<vk::SurfaceFormatKHR> formats;
+    std::vector<vk::PresentModeKHR> presentModes;
+};
+
+struct Vertex
+{
+    glm::vec2 pos;
+    glm::vec3 colour;
+
+    static vk::VertexInputBindingDescription getBindingDescription();
+    static std::array<vk::VertexInputAttributeDescription, 2>
+    getAttributeDescriptions();
+};
 
 class Application
 {
@@ -51,16 +80,6 @@ private:
     vk::DebugUtilsMessengerCreateInfoEXT getDebugMessengerCreateInfo();
     void setupDebugMessenger();
 
-    struct QueueFamilyIndices
-    {
-        std::optional<std::uint32_t> graphicsFamily;
-        std::optional<std::uint32_t> presentFamily;
-
-        bool isComplete() const
-        {
-            return graphicsFamily.has_value() && presentFamily.has_value();
-        }
-    };
     void pickPhysicalDevice();
     bool isDeviceSuitable(vk::PhysicalDevice const& device);
     QueueFamilyIndices findQueueFamilies(vk::PhysicalDevice const& device);
@@ -68,13 +87,6 @@ private:
     void createLogicalDevice();
 
     void createSurface();
-
-    struct SwapChainSupportDetails
-    {
-        vk::SurfaceCapabilitiesKHR capabilities;
-        std::vector<vk::SurfaceFormatKHR> formats;
-        std::vector<vk::PresentModeKHR> presentModes;
-    };
 
     bool checkDeviceExtensionSupport(vk::PhysicalDevice const& device);
     SwapChainSupportDetails
@@ -104,6 +116,10 @@ private:
 
     void recreateSwapChain();
     void cleanupSwapChain();
+
+    void createVertexBuffer();
+    std::uint32_t findMemoryType(std::uint32_t typeFilter,
+                                 vk::MemoryPropertyFlags const& properties);
 
     GLFWwindow* mWindow{nullptr};
 
@@ -138,4 +154,7 @@ private:
 
     std::size_t mCurrentFrame{0};
     bool mFramebufferResized{false};
+
+    vk::UniqueBuffer mVertexBuffer;
+    vk::UniqueDeviceMemory mVertexBufferMemory;
 };
