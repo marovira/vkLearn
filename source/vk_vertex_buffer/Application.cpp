@@ -838,6 +838,9 @@ void Application::createCommandPool()
     createInfo.queueFamilyIndex = *indices.graphicsFamily;
 
     mCommandPool = mDevice->createCommandPoolUnique(createInfo);
+
+    createInfo.flags = vk::CommandPoolCreateFlagBits::eTransient;
+    mBufferPool      = mDevice->createCommandPoolUnique(createInfo);
 }
 
 void Application::createCommandBuffers()
@@ -857,9 +860,6 @@ void Application::createCommandBuffers()
         vk::CommandBufferBeginInfo beginInfo;
         mCommandBuffers[i]->begin(beginInfo);
 
-        // Next comes the equivalent of glClearColor. We specify the colour
-        // value, along with the information about the dimensions of the
-        // framebuffers, and the renderpass.
         vk::ClearValue clearValue;
         clearValue.color =
             vk::ClearColorValue{std::array<float, 4>{0.0f, 0.0f, 0.0f, 1.0f}};
@@ -1035,30 +1035,41 @@ void Application::cleanupSwapChain()
 
 void Application::createVertexBuffer()
 {
-    vk::BufferCreateInfo bufferInfo;
-    bufferInfo.size  = sizeof(globals::vertices[0]) * globals::vertices.size();
-    bufferInfo.usage = vk::BufferUsageFlagBits::eVertexBuffer;
-    bufferInfo.sharingMode = vk::SharingMode::eExclusive;
+    vk::DeviceSize bufferSize =
+        sizeof(globals::vertices[0]) * globals::vertices.size();
 
-    mVertexBuffer = mDevice->createBufferUnique(bufferInfo);
+    // Create staging buffer.
+    vk::Buffer stagingBuffer;
+    vk::DeviceMemory stagingBufferMemory;
+    createBuffer(bufferSize, vk::BufferUsageFlagBits::eTransferSrc,
+                 vk::MemoryPropertyFlagBits::eHostVisible |
+                     vk::MemoryPropertyFlagBits::eHostCoherent,
+                 stagingBuffer, stagingBufferMemory);
 
-    auto memRequirements = mDevice->getBufferMemoryRequirements(*mVertexBuffer);
-
-    vk::MemoryAllocateInfo allocInfo;
-    allocInfo.allocationSize = memRequirements.size;
-    allocInfo.memoryTypeIndex =
-        findMemoryType(memRequirements.memoryTypeBits,
-                       vk::MemoryPropertyFlagBits::eHostVisible |
-                           vk::MemoryPropertyFlagBits::eHostCoherent);
-
-    mVertexBufferMemory = mDevice->allocateMemoryUnique(allocInfo);
-    mDevice->bindBufferMemory(*mVertexBuffer, *mVertexBufferMemory, 0);
-
+    // Map and copy the data over.
     void* data;
-    mDevice->mapMemory(*mVertexBufferMemory, 0, bufferInfo.size, {}, &data);
+    mDevice->mapMemory(stagingBufferMemory, 0, bufferSize, {}, &data);
     memcpy(data, globals::vertices.data(),
-           static_cast<std::size_t>(bufferInfo.size));
-    mDevice->unmapMemory(*mVertexBufferMemory);
+           static_cast<std::size_t>(bufferSize));
+    mDevice->unmapMemory(stagingBufferMemory);
+
+    // Now create the vertex buffer.
+    vk::Buffer vertexBuffer;
+    vk::DeviceMemory vertexMemory;
+    createBuffer(bufferSize,
+                 vk::BufferUsageFlagBits::eTransferDst |
+                     vk::BufferUsageFlagBits::eVertexBuffer,
+                 vk::MemoryPropertyFlagBits::eDeviceLocal, vertexBuffer,
+                 vertexMemory);
+    mVertexBuffer       = vk::UniqueBuffer(vertexBuffer, *mDevice);
+    mVertexBufferMemory = vk::UniqueDeviceMemory(vertexMemory, *mDevice);
+
+    copyBuffer(stagingBuffer, vertexBuffer, bufferSize);
+
+    // The staging buffer data is not in unique handles, so we have to release
+    // them manually.
+    mDevice->destroyBuffer(stagingBuffer);
+    mDevice->freeMemory(stagingBufferMemory);
 }
 
 std::uint32_t
@@ -1077,4 +1088,61 @@ Application::findMemoryType(std::uint32_t typeFilter,
     }
 
     throw std::runtime_error{"error: failed to find suitable memory type."};
+}
+
+void Application::createBuffer(vk::DeviceSize const& size,
+                               vk::BufferUsageFlags const& usage,
+                               vk::MemoryPropertyFlags const& properties,
+                               vk::Buffer& buffer,
+                               vk::DeviceMemory& bufferMemory)
+{
+    vk::BufferCreateInfo bufferInfo;
+    bufferInfo.size        = size;
+    bufferInfo.usage       = usage;
+    bufferInfo.sharingMode = vk::SharingMode::eExclusive;
+
+    buffer = mDevice->createBuffer(bufferInfo);
+
+    auto memRequirements = mDevice->getBufferMemoryRequirements(buffer);
+
+    vk::MemoryAllocateInfo allocInfo;
+    allocInfo.allocationSize = memRequirements.size;
+    allocInfo.memoryTypeIndex =
+        findMemoryType(memRequirements.memoryTypeBits, properties);
+
+    bufferMemory = mDevice->allocateMemory(allocInfo);
+    mDevice->bindBufferMemory(buffer, bufferMemory, 0);
+}
+
+void Application::copyBuffer(vk::Buffer const& srcBuffer,
+                             vk::Buffer const& dstBuffer,
+                             vk::DeviceSize const& size)
+{
+    vk::CommandBufferAllocateInfo allocInfo;
+    allocInfo.level              = vk::CommandBufferLevel::ePrimary;
+    allocInfo.commandPool        = *mBufferPool;
+    allocInfo.commandBufferCount = 1;
+
+    vk::CommandBuffer commandBuffer =
+        mDevice->allocateCommandBuffers(allocInfo).front();
+
+    vk::CommandBufferBeginInfo beginInfo;
+    beginInfo.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
+
+    commandBuffer.begin(beginInfo);
+    vk::BufferCopy copyRegion;
+    copyRegion.srcOffset = 0;
+    copyRegion.dstOffset = 0;
+    copyRegion.size      = size;
+    commandBuffer.copyBuffer(srcBuffer, dstBuffer, 1, &copyRegion);
+    commandBuffer.end();
+
+    vk::SubmitInfo submitInfo;
+    submitInfo.commandBufferCount = 1;
+    submitInfo.pCommandBuffers    = &commandBuffer;
+
+    // If we want to have multiple transfers, we can schedule them with fences
+    // here.
+    mGraphicsQueue.submit({submitInfo}, {});
+    mGraphicsQueue.waitIdle();
 }

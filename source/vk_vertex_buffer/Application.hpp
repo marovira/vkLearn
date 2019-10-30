@@ -121,6 +121,13 @@ private:
     std::uint32_t findMemoryType(std::uint32_t typeFilter,
                                  vk::MemoryPropertyFlags const& properties);
 
+    void createBuffer(vk::DeviceSize const& size,
+                      vk::BufferUsageFlags const& usage,
+                      vk::MemoryPropertyFlags const& properties,
+                      vk::Buffer& buffer, vk::DeviceMemory& bufferMemory);
+    void copyBuffer(vk::Buffer const& srcBuffer, vk::Buffer const& dstBuffer,
+                    vk::DeviceSize const& size);
+
     GLFWwindow* mWindow{nullptr};
 
     vk::UniqueInstance mInstance{};
@@ -145,6 +152,7 @@ private:
     std::vector<vk::UniqueFramebuffer> mSwapchainFramebuffers{};
 
     vk::UniqueCommandPool mCommandPool{};
+    vk::UniqueCommandPool mBufferPool{};
     std::vector<vk::UniqueCommandBuffer> mCommandBuffers{};
 
     std::vector<vk::UniqueSemaphore> mImageAvailableSemaphores{};
