@@ -32,10 +32,14 @@ namespace globals
 
     // clang-format off
     const std::vector<Vertex> vertices{
-        {{ 0.0f, -0.5f},    {1.0f, 0.0f, 0.0f}},
-        {{ 0.5f,  0.5f},    {0.0f, 1.0f, 0.0f}},
-        {{-0.5f,  0.5f},    {0.0f, 0.0f, 1.0f}}};
+        {{-0.5f, -0.5f},    {1.0f, 0.0f, 0.0f}},
+        {{ 0.5f, -0.5f},    {0.0f, 1.0f, 0.0f}},
+        {{ 0.5f,  0.5f},    {0.0f, 0.0f, 1.0f}},
+        {{-0.5f,  0.5f},    {1.0f, 1.0f, 1.0f}}
+    };
     // clang-format on
+
+    const std::vector<std::uint16_t> indices{0, 1, 2, 2, 3, 0};
 } // namespace globals
 
 static VKAPI_ATTR vk::Bool32 VKAPI_CALL
@@ -149,7 +153,7 @@ Vertex::getAttributeDescriptions()
     attributeDescriptions[1].binding  = 0;
     attributeDescriptions[1].location = 1;
     attributeDescriptions[1].format   = vk::Format::eR32G32B32Sfloat;
-    attributeDescriptions[1].offset   = offsetof(Vertex, pos);
+    attributeDescriptions[1].offset   = offsetof(Vertex, colour);
 
     return attributeDescriptions;
 }
@@ -190,6 +194,7 @@ void Application::initVulkan()
     createFramebuffers();
     createCommandPool();
     createVertexBuffer();
+    createIndexBuffer();
     createCommandBuffers();
     createSyncObjects();
 }
@@ -879,8 +884,10 @@ void Application::createCommandBuffers()
         std::array<vk::DeviceSize, 1> offsets{0};
 
         mCommandBuffers[i]->bindVertexBuffers(0, vertexBuffers, offsets);
-        mCommandBuffers[i]->draw(
-            static_cast<std::uint32_t>(globals::vertices.size()), 1, 0, 0);
+        mCommandBuffers[i]->bindIndexBuffer(*mIndexBuffer, 0,
+                                            vk::IndexType::eUint16);
+        mCommandBuffers[i]->drawIndexed(
+            static_cast<std::uint32_t>(globals::indices.size()), 1, 0, 0, 0);
         mCommandBuffers[i]->endRenderPass();
         mCommandBuffers[i]->end();
     }
@@ -1145,4 +1152,37 @@ void Application::copyBuffer(vk::Buffer const& srcBuffer,
     // here.
     mGraphicsQueue.submit({submitInfo}, {});
     mGraphicsQueue.waitIdle();
+}
+
+void Application::createIndexBuffer()
+{
+    vk::DeviceSize bufferSize =
+        sizeof(globals::indices[0]) * globals::indices.size();
+
+    vk::Buffer stagingBuffer;
+    vk::DeviceMemory stagingBufferMemory;
+    createBuffer(bufferSize, vk::BufferUsageFlagBits::eTransferSrc,
+                 vk::MemoryPropertyFlagBits::eHostVisible |
+                     vk::MemoryPropertyFlagBits::eHostCoherent,
+                 stagingBuffer, stagingBufferMemory);
+
+    void* data;
+    mDevice->mapMemory(stagingBufferMemory, 0, bufferSize, {}, &data);
+    memcpy(data, globals::indices.data(), static_cast<std::size_t>(bufferSize));
+    mDevice->unmapMemory(stagingBufferMemory);
+
+    vk::Buffer indexBuffer;
+    vk::DeviceMemory indexMemory;
+    createBuffer(bufferSize,
+                 vk::BufferUsageFlagBits::eTransferDst |
+                     vk::BufferUsageFlagBits::eIndexBuffer,
+                 vk::MemoryPropertyFlagBits::eDeviceLocal, indexBuffer,
+                 indexMemory);
+    mIndexBuffer       = vk::UniqueBuffer(indexBuffer, *mDevice);
+    mIndexBufferMemory = vk::UniqueDeviceMemory(indexMemory, *mDevice);
+
+    copyBuffer(stagingBuffer, indexBuffer, bufferSize);
+
+    mDevice->destroyBuffer(stagingBuffer);
+    mDevice->freeMemory(stagingBufferMemory);
 }

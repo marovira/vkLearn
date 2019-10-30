@@ -128,6 +128,8 @@ private:
     void copyBuffer(vk::Buffer const& srcBuffer, vk::Buffer const& dstBuffer,
                     vk::DeviceSize const& size);
 
+    void createIndexBuffer();
+
     GLFWwindow* mWindow{nullptr};
 
     vk::UniqueInstance mInstance{};
@@ -165,4 +167,7 @@ private:
 
     vk::UniqueBuffer mVertexBuffer;
     vk::UniqueDeviceMemory mVertexBufferMemory;
+
+    vk::UniqueBuffer mIndexBuffer;
+    vk::UniqueDeviceMemory mIndexBufferMemory;
 };
