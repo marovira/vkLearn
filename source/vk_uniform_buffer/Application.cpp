@@ -190,11 +190,15 @@ void Application::initVulkan()
     createSwapChain();
     createImageViews();
     createRenderPass();
+    createDescriptorSetLayout();
     createGraphicsPipeline();
     createFramebuffers();
     createCommandPool();
     createVertexBuffer();
     createIndexBuffer();
+    createUniformBuffers();
+    createDescriptorPool();
+    createDescriptorSets();
     createCommandBuffers();
     createSyncObjects();
 }
@@ -708,7 +712,7 @@ void Application::createGraphicsPipeline()
     rasterizer.rasterizerDiscardEnable = false;
     rasterizer.polygonMode             = vk::PolygonMode::eFill;
     rasterizer.cullMode                = vk::CullModeFlagBits::eBack;
-    rasterizer.frontFace               = vk::FrontFace::eClockwise;
+    rasterizer.frontFace               = vk::FrontFace::eCounterClockwise;
     rasterizer.depthBiasEnable         = false;
     rasterizer.lineWidth               = 1.0f;
 
@@ -743,6 +747,8 @@ void Application::createGraphicsPipeline()
     dynamicState.pDynamicStates = dynamicStates.data();
 
     vk::PipelineLayoutCreateInfo pipelineLayoutCreateInfo;
+    pipelineLayoutCreateInfo.setLayoutCount = 1;
+    pipelineLayoutCreateInfo.pSetLayouts    = &(*mDescriptorSetLayout);
     mPipelineLayout =
         mDevice->createPipelineLayoutUnique(pipelineLayoutCreateInfo);
 
@@ -886,6 +892,9 @@ void Application::createCommandBuffers()
         mCommandBuffers[i]->bindVertexBuffers(0, vertexBuffers, offsets);
         mCommandBuffers[i]->bindIndexBuffer(*mIndexBuffer, 0,
                                             vk::IndexType::eUint16);
+        mCommandBuffers[i]->bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
+                                               *mPipelineLayout, 0,
+                                               {*mDescriptorSets[i]}, {});
         mCommandBuffers[i]->drawIndexed(
             static_cast<std::uint32_t>(globals::indices.size()), 1, 0, 0, 0);
         mCommandBuffers[i]->endRenderPass();
@@ -944,6 +953,8 @@ void Application::drawFrame()
 
     std::uint32_t imageIndex = result.value;
 
+    updateUniformBuffer(imageIndex);
+
     std::array<vk::Semaphore, 1> waitSemaphores{
         *mImageAvailableSemaphores[mCurrentFrame]};
     std::array<vk::PipelineStageFlags, 1> waitStages{
@@ -1000,6 +1011,9 @@ void Application::recreateSwapChain()
     createRenderPass();
     createGraphicsPipeline();
     createFramebuffers();
+    createUniformBuffers();
+    createDescriptorPool();
+    createDescriptorSets();
     createCommandBuffers();
 }
 
@@ -1038,6 +1052,15 @@ void Application::cleanupSwapChain()
 
     mDevice->destroySwapchainKHR(*mSwapchain);
     mSwapchain.release();
+
+    for (std::size_t i{0}; i < mSwapchainImages.size(); ++i)
+    {
+        mDevice->destroyBuffer(*mUniformBuffers[i]);
+        mDevice->freeMemory(*mUniformBuffersMemory[i]);
+    }
+
+    mUniformBuffers.clear();
+    mUniformBuffersMemory.clear();
 }
 
 void Application::createVertexBuffer()
@@ -1185,4 +1208,115 @@ void Application::createIndexBuffer()
 
     mDevice->destroyBuffer(stagingBuffer);
     mDevice->freeMemory(stagingBufferMemory);
+}
+
+void Application::createDescriptorSetLayout()
+{
+    vk::DescriptorSetLayoutBinding uboLayoutBinding;
+    uboLayoutBinding.binding         = 0;
+    uboLayoutBinding.descriptorType  = vk::DescriptorType::eUniformBuffer;
+    uboLayoutBinding.descriptorCount = 1;
+    uboLayoutBinding.stageFlags      = vk::ShaderStageFlagBits::eVertex;
+
+    vk::DescriptorSetLayoutCreateInfo createInfo;
+    createInfo.bindingCount = 1;
+    createInfo.pBindings    = &uboLayoutBinding;
+
+    mDescriptorSetLayout = mDevice->createDescriptorSetLayoutUnique(createInfo);
+}
+
+void Application::createUniformBuffers()
+{
+    vk::DeviceSize bufferSize = sizeof(UniformMatrices);
+
+    mUniformBuffers.resize(mSwapchainImages.size());
+    mUniformBuffersMemory.resize(mSwapchainImages.size());
+
+    for (std::size_t i{0}; i < mSwapchainImages.size(); ++i)
+    {
+        vk::Buffer buffer;
+        vk::DeviceMemory memory;
+        createBuffer(bufferSize, vk::BufferUsageFlagBits::eUniformBuffer,
+                     vk::MemoryPropertyFlagBits::eHostVisible |
+                         vk::MemoryPropertyFlagBits::eHostCoherent,
+                     buffer, memory);
+        mUniformBuffers[i]       = vk::UniqueBuffer(buffer, *mDevice);
+        mUniformBuffersMemory[i] = vk::UniqueDeviceMemory(memory, *mDevice);
+    }
+}
+
+void Application::updateUniformBuffer(std::uint32_t currentImage)
+{
+    static auto startTime = std::chrono::high_resolution_clock::now();
+
+    auto currentTime = std::chrono::high_resolution_clock::now();
+    float time = std::chrono::duration<float, std::chrono::seconds::period>(
+                     currentTime - startTime)
+                     .count();
+
+    UniformMatrices ubo;
+    ubo.model      = glm::rotate(glm::mat4{1.0f}, time * glm::radians(90.0f),
+                            glm::vec3(0.0f, 0.0f, 1.0f));
+    ubo.view       = glm::lookAt(glm::vec3(2.0f), glm::vec3(0.0f),
+                           glm::vec3(0.0f, 0.0f, 1.0f));
+    ubo.projection = glm::perspective(
+        glm::radians(45.0f),
+        mSwapchainExtent.width / static_cast<float>(mSwapchainExtent.height),
+        0.1f, 10.0f);
+    ubo.projection[1][1] *= -1;
+
+    void* data;
+    mDevice->mapMemory(*mUniformBuffersMemory[currentImage], 0, sizeof(ubo), {},
+                       &data);
+    memcpy(data, &ubo, sizeof(ubo));
+    mDevice->unmapMemory(*mUniformBuffersMemory[currentImage]);
+}
+
+void Application::createDescriptorPool()
+{
+    vk::DescriptorPoolSize poolSize;
+    poolSize.type = vk::DescriptorType::eUniformBuffer;
+    poolSize.descriptorCount =
+        static_cast<std::uint32_t>(mSwapchainImages.size());
+
+    vk::DescriptorPoolCreateInfo createInfo;
+    createInfo.poolSizeCount = 1;
+    createInfo.pPoolSizes    = &poolSize;
+    createInfo.maxSets = static_cast<std::uint32_t>(mSwapchainImages.size());
+
+    // Because of the way we are freeing the descriptor pool, this flag needs
+    // to be added to prevent the validation layers from issuing an error.
+    createInfo.flags = vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet;
+
+    mDescriptorPool = mDevice->createDescriptorPoolUnique(createInfo);
+}
+
+void Application::createDescriptorSets()
+{
+    std::vector<vk::DescriptorSetLayout> layouts(mSwapchainImages.size(),
+                                                 *mDescriptorSetLayout);
+    vk::DescriptorSetAllocateInfo allocInfo;
+    allocInfo.descriptorPool     = *mDescriptorPool;
+    allocInfo.descriptorSetCount = static_cast<std::uint32_t>(layouts.size());
+    allocInfo.pSetLayouts        = layouts.data();
+
+    mDescriptorSets = mDevice->allocateDescriptorSetsUnique(allocInfo);
+
+    for (std::size_t i{0}; i < mSwapchainImages.size(); ++i)
+    {
+        vk::DescriptorBufferInfo bufferInfo;
+        bufferInfo.buffer = *mUniformBuffers[i];
+        bufferInfo.offset = 0;
+        bufferInfo.range  = sizeof(UniformMatrices);
+
+        vk::WriteDescriptorSet descriptorWrite;
+        descriptorWrite.dstSet          = *mDescriptorSets[i];
+        descriptorWrite.dstBinding      = 0;
+        descriptorWrite.dstArrayElement = 0;
+        descriptorWrite.descriptorType  = vk::DescriptorType::eUniformBuffer;
+        descriptorWrite.descriptorCount = 1;
+        descriptorWrite.pBufferInfo     = &bufferInfo;
+
+        mDevice->updateDescriptorSets({descriptorWrite}, {});
+    }
 }

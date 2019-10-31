@@ -5,9 +5,13 @@
 
 #include <vulkan/vulkan.hpp>
 
-#include <algorithm>
-#include <functional>
+#define GLM_FORCE_RADIANS
 #include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
+
+#include <algorithm>
+#include <chrono>
+#include <functional>
 #include <optional>
 
 struct QueueFamilyIndices
@@ -36,6 +40,13 @@ struct Vertex
     static vk::VertexInputBindingDescription getBindingDescription();
     static std::array<vk::VertexInputAttributeDescription, 2>
     getAttributeDescriptions();
+};
+
+struct UniformMatrices
+{
+    glm::mat4 model;
+    glm::mat4 view;
+    glm::mat4 projection;
 };
 
 class Application
@@ -130,37 +141,45 @@ private:
 
     void createIndexBuffer();
 
+    void createDescriptorSetLayout();
+    void createUniformBuffers();
+    void updateUniformBuffer(std::uint32_t currentImage);
+
+    void createDescriptorPool();
+    void createDescriptorSets();
+
     GLFWwindow* mWindow{nullptr};
 
-    vk::UniqueInstance mInstance{};
-    vk::UniqueDebugUtilsMessengerEXT mDebugMessenger{};
+    vk::UniqueInstance mInstance;
+    vk::UniqueDebugUtilsMessengerEXT mDebugMessenger;
 
-    vk::PhysicalDevice mPhysicalDevice{};
-    vk::UniqueDevice mDevice{};
+    vk::PhysicalDevice mPhysicalDevice;
+    vk::UniqueDevice mDevice;
 
-    vk::Queue mGraphicsQueue{};
+    vk::Queue mGraphicsQueue;
 
-    vk::UniqueSurfaceKHR mSurface{};
-    vk::Queue mPresentQueue{};
+    vk::UniqueSurfaceKHR mSurface;
+    vk::Queue mPresentQueue;
 
-    vk::UniqueSwapchainKHR mSwapchain{};
-    std::vector<vk::Image> mSwapchainImages{};
-    vk::Format mSwapchainImageFormat{};
-    vk::Extent2D mSwapchainExtent{};
-    std::vector<vk::UniqueImageView> mSwapchainImageViews{};
-    vk::UniqueRenderPass mRenderPass{};
-    vk::UniquePipelineLayout mPipelineLayout{};
-    vk::UniquePipeline mGraphicsPipeline{};
-    std::vector<vk::UniqueFramebuffer> mSwapchainFramebuffers{};
+    vk::UniqueSwapchainKHR mSwapchain;
+    std::vector<vk::Image> mSwapchainImages;
+    vk::Format mSwapchainImageFormat;
+    vk::Extent2D mSwapchainExtent;
+    std::vector<vk::UniqueImageView> mSwapchainImageViews;
+    vk::UniqueRenderPass mRenderPass;
+    vk::UniqueDescriptorSetLayout mDescriptorSetLayout;
+    vk::UniquePipelineLayout mPipelineLayout;
+    vk::UniquePipeline mGraphicsPipeline;
+    std::vector<vk::UniqueFramebuffer> mSwapchainFramebuffers;
 
-    vk::UniqueCommandPool mCommandPool{};
-    vk::UniqueCommandPool mBufferPool{};
-    std::vector<vk::UniqueCommandBuffer> mCommandBuffers{};
+    vk::UniqueCommandPool mCommandPool;
+    vk::UniqueCommandPool mBufferPool;
+    std::vector<vk::UniqueCommandBuffer> mCommandBuffers;
 
-    std::vector<vk::UniqueSemaphore> mImageAvailableSemaphores{};
-    std::vector<vk::UniqueSemaphore> mRenderFinishedSemaphores{};
+    std::vector<vk::UniqueSemaphore> mImageAvailableSemaphores;
+    std::vector<vk::UniqueSemaphore> mRenderFinishedSemaphores;
 
-    std::vector<vk::UniqueFence> mInFlightFences{};
+    std::vector<vk::UniqueFence> mInFlightFences;
 
     std::size_t mCurrentFrame{0};
     bool mFramebufferResized{false};
@@ -170,4 +189,10 @@ private:
 
     vk::UniqueBuffer mIndexBuffer;
     vk::UniqueDeviceMemory mIndexBufferMemory;
+
+    std::vector<vk::UniqueBuffer> mUniformBuffers;
+    std::vector<vk::UniqueDeviceMemory> mUniformBuffersMemory;
+
+    vk::UniqueDescriptorPool mDescriptorPool;
+    std::vector<vk::UniqueDescriptorSet> mDescriptorSets;
 };
