@@ -197,6 +197,8 @@ void Application::initVulkan()
     createFramebuffers();
     createCommandPool();
     createTextureImage();
+    createTextureImageView();
+    createTextureSampler();
     createVertexBuffer();
     createIndexBuffer();
     createUniformBuffers();
@@ -410,7 +412,7 @@ bool Application::isDeviceSuitable(vk::PhysicalDevice const& device)
     }
 
     return isDeviceValid && indices.isComplete() && areExtensionsSupported &&
-           isSwapChainAdequate;
+           isSwapChainAdequate && deviceFeatures.samplerAnisotropy;
 }
 
 QueueFamilyIndices
@@ -459,6 +461,7 @@ void Application::createLogicalDevice()
     }
 
     vk::PhysicalDeviceFeatures deviceFeatures;
+    deviceFeatures.samplerAnisotropy = true;
     std::uint32_t layerCount =
         (globals::enableValidationLayers)
             ? static_cast<std::uint32_t>(globals::validationLayers.size())
@@ -632,27 +635,8 @@ void Application::createImageViews()
 
     for (std::size_t i{0}; i < mSwapchainImages.size(); ++i)
     {
-        vk::ComponentMapping components;
-        components.r = vk::ComponentSwizzle::eIdentity;
-        components.g = vk::ComponentSwizzle::eIdentity;
-        components.b = vk::ComponentSwizzle::eIdentity;
-        components.a = vk::ComponentSwizzle::eIdentity;
-
-        vk::ImageSubresourceRange subresourceRange;
-        subresourceRange.aspectMask     = vk::ImageAspectFlagBits::eColor;
-        subresourceRange.baseMipLevel   = 0;
-        subresourceRange.levelCount     = 1;
-        subresourceRange.baseArrayLayer = 0;
-        subresourceRange.layerCount     = 1;
-
-        vk::ImageViewCreateInfo createInfo;
-        createInfo.image            = mSwapchainImages[i];
-        createInfo.viewType         = vk::ImageViewType::e2D;
-        createInfo.format           = mSwapchainImageFormat;
-        createInfo.components       = components;
-        createInfo.subresourceRange = subresourceRange;
-
-        mSwapchainImageViews[i] = mDevice->createImageViewUnique(createInfo);
+        auto view = createImageView(mSwapchainImages[i], mSwapchainImageFormat);
+        mSwapchainImageViews[i] = vk::UniqueImageView(view, *mDevice);
     }
 }
 
@@ -1490,4 +1474,48 @@ void Application::copyBufferToImage(vk::Buffer const& buffer,
         buffer, image, vk::ImageLayout::eTransferDstOptimal, {region});
 
     endSingleTimeCommands(commandBuffer);
+}
+
+void Application::createTextureImageView()
+{
+    auto view = createImageView(*mTextureImage, vk::Format::eR8G8B8A8Unorm);
+    mTextureImageView = vk::UniqueImageView(view, *mDevice);
+}
+
+vk::ImageView Application::createImageView(vk::Image const& image,
+                                           vk::Format const& format)
+{
+    vk::ImageViewCreateInfo viewInfo;
+    viewInfo.image                           = image;
+    viewInfo.viewType                        = vk::ImageViewType::e2D;
+    viewInfo.format                          = format;
+    viewInfo.subresourceRange.aspectMask     = vk::ImageAspectFlagBits::eColor;
+    viewInfo.subresourceRange.baseMipLevel   = 0;
+    viewInfo.subresourceRange.levelCount     = 1;
+    viewInfo.subresourceRange.baseArrayLayer = 0;
+    viewInfo.subresourceRange.layerCount     = 1;
+
+    return mDevice->createImageView(viewInfo);
+}
+
+void Application::createTextureSampler()
+{
+    vk::SamplerCreateInfo samplerInfo;
+    samplerInfo.magFilter               = vk::Filter::eLinear;
+    samplerInfo.minFilter               = vk::Filter::eLinear;
+    samplerInfo.addressModeU            = vk::SamplerAddressMode::eRepeat;
+    samplerInfo.addressModeV            = vk::SamplerAddressMode::eRepeat;
+    samplerInfo.addressModeW            = vk::SamplerAddressMode::eRepeat;
+    samplerInfo.anisotropyEnable        = true;
+    samplerInfo.maxAnisotropy           = 16;
+    samplerInfo.borderColor             = vk::BorderColor::eIntOpaqueBlack;
+    samplerInfo.unnormalizedCoordinates = false;
+    samplerInfo.compareEnable           = false;
+    samplerInfo.compareOp               = vk::CompareOp::eAlways;
+    samplerInfo.mipmapMode              = vk::SamplerMipmapMode::eLinear;
+    samplerInfo.mipLodBias              = 0.0f;
+    samplerInfo.minLod                  = 0.0f;
+    samplerInfo.maxLod                  = 0.0f;
+
+    mTextureSampler = mDevice->createSamplerUnique(samplerInfo);
 }

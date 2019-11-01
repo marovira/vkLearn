@@ -162,6 +162,11 @@ private:
     void copyBufferToImage(vk::Buffer const& buffer, vk::Image const& image,
                            std::uint32_t width, std::uint32_t height);
 
+    void createTextureImageView();
+    vk::ImageView createImageView(vk::Image const& image,
+                                  vk::Format const& format);
+    void createTextureSampler();
+
     GLFWwindow* mWindow{nullptr};
 
     vk::UniqueInstance mInstance;
@@ -212,4 +217,7 @@ private:
 
     vk::UniqueImage mTextureImage;
     vk::UniqueDeviceMemory mTextureImageMemory;
+
+    vk::UniqueImageView mTextureImageView;
+    vk::UniqueSampler mTextureSampler;
 };
