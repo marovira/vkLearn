@@ -34,10 +34,10 @@ namespace globals
 
     // clang-format off
     const std::vector<Vertex> vertices{
-        {{-0.5f, -0.5f},    {1.0f, 0.0f, 0.0f}},
-        {{ 0.5f, -0.5f},    {0.0f, 1.0f, 0.0f}},
-        {{ 0.5f,  0.5f},    {0.0f, 0.0f, 1.0f}},
-        {{-0.5f,  0.5f},    {1.0f, 1.0f, 1.0f}}
+        {{-0.5f, -0.5f},    {1.0f, 0.0f, 0.0f},     {1.0f, 0.0f}},
+        {{ 0.5f, -0.5f},    {0.0f, 1.0f, 0.0f},     {0.0f, 0.0f}},
+        {{ 0.5f,  0.5f},    {0.0f, 0.0f, 1.0f},     {0.0f, 1.0f}},
+        {{-0.5f,  0.5f},    {1.0f, 1.0f, 1.0f},     {1.0f, 1.0f}}
     };
     // clang-format on
 
@@ -142,10 +142,10 @@ vk::VertexInputBindingDescription Vertex::getBindingDescription()
     return bindingDescription;
 }
 
-std::array<vk::VertexInputAttributeDescription, 2>
+std::array<vk::VertexInputAttributeDescription, 3>
 Vertex::getAttributeDescriptions()
 {
-    std::array<vk::VertexInputAttributeDescription, 2> attributeDescriptions;
+    std::array<vk::VertexInputAttributeDescription, 3> attributeDescriptions;
 
     attributeDescriptions[0].binding  = 0;
     attributeDescriptions[0].location = 0;
@@ -156,6 +156,11 @@ Vertex::getAttributeDescriptions()
     attributeDescriptions[1].location = 1;
     attributeDescriptions[1].format   = vk::Format::eR32G32B32Sfloat;
     attributeDescriptions[1].offset   = offsetof(Vertex, colour);
+
+    attributeDescriptions[2].binding  = 0;
+    attributeDescriptions[2].location = 2;
+    attributeDescriptions[2].format   = vk::Format::eR32G32Sfloat;
+    attributeDescriptions[2].offset   = offsetof(Vertex, texCoord);
 
     return attributeDescriptions;
 }
@@ -1187,9 +1192,19 @@ void Application::createDescriptorSetLayout()
     uboLayoutBinding.descriptorCount = 1;
     uboLayoutBinding.stageFlags      = vk::ShaderStageFlagBits::eVertex;
 
+    vk::DescriptorSetLayoutBinding samplerLayoutBinding;
+    samplerLayoutBinding.binding         = 1;
+    samplerLayoutBinding.descriptorCount = 1;
+    samplerLayoutBinding.descriptorType =
+        vk::DescriptorType::eCombinedImageSampler;
+    samplerLayoutBinding.pImmutableSamplers = nullptr;
+    samplerLayoutBinding.stageFlags = vk::ShaderStageFlagBits::eFragment;
+
+    std::array<vk::DescriptorSetLayoutBinding, 2> bindings = {
+        uboLayoutBinding, samplerLayoutBinding};
     vk::DescriptorSetLayoutCreateInfo createInfo;
-    createInfo.bindingCount = 1;
-    createInfo.pBindings    = &uboLayoutBinding;
+    createInfo.bindingCount = static_cast<std::uint32_t>(bindings.size());
+    createInfo.pBindings    = bindings.data();
 
     mDescriptorSetLayout = mDevice->createDescriptorSetLayoutUnique(createInfo);
 }
@@ -1243,14 +1258,17 @@ void Application::updateUniformBuffer(std::uint32_t currentImage)
 
 void Application::createDescriptorPool()
 {
-    vk::DescriptorPoolSize poolSize;
-    poolSize.type = vk::DescriptorType::eUniformBuffer;
-    poolSize.descriptorCount =
+    std::array<vk::DescriptorPoolSize, 2> poolSizes;
+    poolSizes[0].type = vk::DescriptorType::eUniformBuffer;
+    poolSizes[0].descriptorCount =
+        static_cast<std::uint32_t>(mSwapchainImages.size());
+    poolSizes[1].type = vk::DescriptorType::eCombinedImageSampler;
+    poolSizes[1].descriptorCount =
         static_cast<std::uint32_t>(mSwapchainImages.size());
 
     vk::DescriptorPoolCreateInfo createInfo;
-    createInfo.poolSizeCount = 1;
-    createInfo.pPoolSizes    = &poolSize;
+    createInfo.poolSizeCount = static_cast<std::uint32_t>(poolSizes.size());
+    createInfo.pPoolSizes    = poolSizes.data();
     createInfo.maxSets = static_cast<std::uint32_t>(mSwapchainImages.size());
 
     // Because of the way we are freeing the descriptor pool, this flag needs
@@ -1278,15 +1296,29 @@ void Application::createDescriptorSets()
         bufferInfo.offset = 0;
         bufferInfo.range  = sizeof(UniformMatrices);
 
-        vk::WriteDescriptorSet descriptorWrite;
-        descriptorWrite.dstSet          = *mDescriptorSets[i];
-        descriptorWrite.dstBinding      = 0;
-        descriptorWrite.dstArrayElement = 0;
-        descriptorWrite.descriptorType  = vk::DescriptorType::eUniformBuffer;
-        descriptorWrite.descriptorCount = 1;
-        descriptorWrite.pBufferInfo     = &bufferInfo;
+        vk::DescriptorImageInfo imageInfo;
+        imageInfo.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+        imageInfo.imageView   = *mTextureImageView;
+        imageInfo.sampler     = *mTextureSampler;
 
-        mDevice->updateDescriptorSets({descriptorWrite}, {});
+        std::array<vk::WriteDescriptorSet, 2> descriptorWrites;
+
+        descriptorWrites[0].dstSet          = *mDescriptorSets[i];
+        descriptorWrites[0].dstBinding      = 0;
+        descriptorWrites[0].dstArrayElement = 0;
+        descriptorWrites[0].descriptorType = vk::DescriptorType::eUniformBuffer;
+        descriptorWrites[0].descriptorCount = 1;
+        descriptorWrites[0].pBufferInfo     = &bufferInfo;
+
+        descriptorWrites[1].dstSet          = *mDescriptorSets[i];
+        descriptorWrites[1].dstBinding      = 1;
+        descriptorWrites[1].dstArrayElement = 0;
+        descriptorWrites[1].descriptorType =
+            vk::DescriptorType::eCombinedImageSampler;
+        descriptorWrites[1].descriptorCount = 1;
+        descriptorWrites[1].pImageInfo      = &imageInfo;
+
+        mDevice->updateDescriptorSets(descriptorWrites, {});
     }
 }
 
