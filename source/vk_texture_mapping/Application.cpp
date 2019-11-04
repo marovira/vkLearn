@@ -1366,6 +1366,9 @@ void Application::createTextureImage()
                           vk::ImageLayout::eUndefined,
                           vk::ImageLayout::eTransferDstOptimal);
     copyBufferToImage(stagingBuffer, image, texWidth, texHeight);
+    transitionImageLayout(image, vk::Format::eR8G8B8A8Unorm,
+                          vk::ImageLayout::eTransferDstOptimal,
+                          vk::ImageLayout::eShaderReadOnlyOptimal);
 
     mDevice->destroyBuffer(stagingBuffer);
     mDevice->freeMemory(stagingMemory);
