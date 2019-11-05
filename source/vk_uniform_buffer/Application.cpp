@@ -1053,14 +1053,12 @@ void Application::cleanupSwapChain()
     mDevice->destroySwapchainKHR(*mSwapchain);
     mSwapchain.release();
 
-    for (std::size_t i{0}; i < mSwapchainImages.size(); ++i)
-    {
-        mDevice->destroyBuffer(*mUniformBuffers[i]);
-        mDevice->freeMemory(*mUniformBuffersMemory[i]);
-    }
-
     mUniformBuffers.clear();
     mUniformBuffersMemory.clear();
+
+    mDescriptorSets.clear();
+    mDevice->destroyDescriptorPool(*mDescriptorPool);
+    mDescriptorPool.release();
 }
 
 void Application::createVertexBuffer()
