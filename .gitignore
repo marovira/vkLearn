@@ -2,4 +2,5 @@ source/vk_triangle/Paths.hpp
 source/vk_vertex_buffer/Paths.hpp
 source/vk_uniform_buffer/Paths.hpp
 source/vk_texture_mapping/Paths.hpp
+source/vk_depth_buffering/Paths.hpp
 *.spv
