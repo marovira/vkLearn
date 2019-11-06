@@ -6,6 +6,7 @@
 #include <vulkan/vulkan.hpp>
 
 #define GLM_FORCE_RADIANS
+#define GLM_FORCE_DEPTH_ZERO_TO_ONE
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
@@ -34,7 +35,7 @@ struct SwapChainSupportDetails
 
 struct Vertex
 {
-    glm::vec2 pos;
+    glm::vec3 pos;
     glm::vec3 colour;
     glm::vec2 texCoord;
 
@@ -80,7 +81,8 @@ private:
             required.begin(), required.end(), [&available, &fn](auto name) {
                 std::string_view propertyName{name};
                 auto result =
-                    std::find_if(available.begin(), available.end(),
+                    std::find_if(available.begin(),
+                                 available.end(),
                                  [&propertyName, &fn](auto const& prop) {
                                      return fn(propertyName, prop);
                                  });
@@ -136,8 +138,10 @@ private:
     void createBuffer(vk::DeviceSize const& size,
                       vk::BufferUsageFlags const& usage,
                       vk::MemoryPropertyFlags const& properties,
-                      vk::Buffer& buffer, vk::DeviceMemory& bufferMemory);
-    void copyBuffer(vk::Buffer const& srcBuffer, vk::Buffer const& dstBuffer,
+                      vk::Buffer& buffer,
+                      vk::DeviceMemory& bufferMemory);
+    void copyBuffer(vk::Buffer const& srcBuffer,
+                    vk::Buffer const& dstBuffer,
                     vk::DeviceSize const& size);
 
     void createIndexBuffer();
@@ -150,23 +154,37 @@ private:
     void createDescriptorSets();
 
     void createTextureImage();
-    void createImage(std::uint32_t width, std::uint32_t height,
-                     vk::Format const& format, vk::ImageTiling const& tiling,
+    void createImage(std::uint32_t width,
+                     std::uint32_t height,
+                     vk::Format const& format,
+                     vk::ImageTiling const& tiling,
                      vk::ImageUsageFlags const& usage,
                      vk::MemoryPropertyFlags const& properties,
-                     vk::Image& image, vk::DeviceMemory& imageMemory);
+                     vk::Image& image,
+                     vk::DeviceMemory& imageMemory);
     vk::CommandBuffer beginSingleTimeCommands();
     void endSingleTimeCommands(vk::CommandBuffer const& commandBuffer);
-    void transitionImageLayout(vk::Image const& image, vk::Format const& format,
+    void transitionImageLayout(vk::Image const& image,
+                               vk::Format const& format,
                                vk::ImageLayout const& oldLayout,
                                vk::ImageLayout const& newLayout);
-    void copyBufferToImage(vk::Buffer const& buffer, vk::Image const& image,
-                           std::uint32_t width, std::uint32_t height);
+    void copyBufferToImage(vk::Buffer const& buffer,
+                           vk::Image const& image,
+                           std::uint32_t width,
+                           std::uint32_t height);
 
     void createTextureImageView();
     vk::ImageView createImageView(vk::Image const& image,
-                                  vk::Format const& format);
+                                  vk::Format const& format,
+                                  vk::ImageAspectFlags const& aspectFlags);
     void createTextureSampler();
+
+    void createDepthResources();
+    vk::Format findSupportedFormat(std::vector<vk::Format> const& candidates,
+                                   vk::ImageTiling const& tiling,
+                                   vk::FormatFeatureFlags const& features);
+    vk::Format findDepthFormat();
+    bool hasStencilComponent(vk::Format const& format);
 
     GLFWwindow* mWindow{nullptr};
 
@@ -221,4 +239,8 @@ private:
 
     vk::UniqueImageView mTextureImageView;
     vk::UniqueSampler mTextureSampler;
+
+    vk::UniqueImage mDepthImage;
+    vk::UniqueDeviceMemory mDepthImageMemory;
+    vk::UniqueImageView mDepthImageView;
 };
