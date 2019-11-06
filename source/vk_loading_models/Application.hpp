@@ -59,7 +59,6 @@ public:
     void run();
     void framebuffeResized();
     void redrawWindow();
-    void toggleSpin();
 
 private:
     void initVulkan();
@@ -251,6 +250,4 @@ private:
 
     std::vector<Vertex> mVertices;
     std::vector<std::uint32_t> mIndices;
-    bool mSpin{false};
-    float mOldTime{0.0f};
 };

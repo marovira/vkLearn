@@ -124,13 +124,6 @@ static void onKeyPress(GLFWwindow* window,
 
         return;
     }
-
-    if (key == GLFW_KEY_SPACE && action == GLFW_PRESS)
-    {
-        auto app =
-            reinterpret_cast<Application*>(glfwGetWindowUserPointer(window));
-        app->toggleSpin();
-    }
 }
 
 bool compareLayers(std::string_view const& layerName,
@@ -191,11 +184,6 @@ void Application::run()
 void Application::framebuffeResized()
 {
     mFramebufferResized = true;
-}
-
-void Application::toggleSpin()
-{
-    mSpin = !mSpin;
 }
 
 void Application::redrawWindow()
@@ -1308,26 +1296,9 @@ void Application::createUniformBuffers()
 
 void Application::updateUniformBuffer(std::uint32_t currentImage)
 {
-    static auto startTime = std::chrono::high_resolution_clock::now();
-
-    auto currentTime = std::chrono::high_resolution_clock::now();
-    float time = std::chrono::duration<float, std::chrono::seconds::period>(
-                     currentTime - startTime)
-                     .count();
-
-    if (!mSpin)
-    {
-        time = mOldTime;
-    }
-    else
-    {
-        mOldTime = time;
-    }
-
     UniformMatrices ubo;
-    ubo.model      = glm::rotate(glm::mat4(1.0f),
-                            time * glm::radians(90.0f),
-                            glm::vec3(0.0f, 0.0f, 1.0f));
+    ubo.model = glm::rotate(
+        glm::mat4(1.0f), glm::radians(180.0f), glm::vec3(0.0f, 0.0f, 1.0f));
     ubo.view       = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f),
                            glm::vec3(0.0f, 0.0f, 0.0f),
                            glm::vec3(0.0f, 0.0f, 1.0f));
