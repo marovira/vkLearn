@@ -8,6 +8,8 @@ endif()
 set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 
 set(SOURCE_ROOT "${PROJECT_SOURCE_DIR}/source")
+set(DATA_ROOT "${PROJECT_SOURCE_DIR}/data")
+set(IMAGES_ROOT "${PROJECT_SOURCE_DIR}/images")
 
 find_package(fmt REQUIRED)
 find_package(glm REQUIRED)
