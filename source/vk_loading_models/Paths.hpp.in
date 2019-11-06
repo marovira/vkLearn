@@ -1,0 +1,5 @@
+#pragma once
+
+static constexpr char const* ShaderPath{"@EXAMPLE_ROOT@/shaders/"};
+static constexpr char const* ImagePath{"@EXAMPLE_ROOT@/images/"};
+static constexpr char const* DataPath{"@EXAMPLE_ROOT@/data/"};

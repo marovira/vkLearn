@@ -14,6 +14,13 @@ find_package(glm REQUIRED)
 find_package(glfw3 REQUIRED)
 find_package(Vulkan REQUIRED)
 
+include(FetchContent)
+FetchContent_Declare(
+    atlas
+    GIT_REPOSITORY https://github.com/marovira/atlas.git)
+FetchContent_Populate(atlas)
+add_subdirectory(${atlas_SOURCE_DIR} ${atlas_BINARY_DIR})
+
 if (MSVC)
     set(COMMON_COMPILER_FLAGS /W4 /WX)
     set(COMMON_DEBUG_FLAGS "$<$<CONFIG:DEBUG>:/ZI>")
