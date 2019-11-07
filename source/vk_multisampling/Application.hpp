@@ -159,6 +159,7 @@ private:
     void createImage(std::uint32_t width,
                      std::uint32_t height,
                      std::uint32_t mipLevel,
+                     vk::SampleCountFlagBits const& numSamples,
                      vk::Format const& format,
                      vk::ImageTiling const& tiling,
                      vk::ImageUsageFlags const& usage,
@@ -198,6 +199,9 @@ private:
                          std::int32_t texWidth,
                          std::int32_t texHeight,
                          std::uint32_t mipLevels);
+
+    vk::SampleCountFlagBits getMaxUsableSampleCount();
+    void createColourResources();
 
     GLFWwindow* mWindow{nullptr};
 
@@ -261,4 +265,9 @@ private:
     std::vector<std::uint32_t> mIndices;
 
     std::uint32_t mMipLevels;
+
+    vk::SampleCountFlagBits mMSAASamples{vk::SampleCountFlagBits::e1};
+    vk::UniqueImage mColourImage;
+    vk::UniqueDeviceMemory mColourImageMemory;
+    vk::UniqueImageView mColourImageView;
 };
