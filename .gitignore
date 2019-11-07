@@ -5,4 +5,5 @@ source/vk_texture_mapping/Paths.hpp
 source/vk_depth_buffering/Paths.hpp
 source/vk_loading_models/Paths.hpp
 source/vk_generating_mipmaps/Paths.hpp
+source/vk_multisampling/Paths.hpp
 *.spv
